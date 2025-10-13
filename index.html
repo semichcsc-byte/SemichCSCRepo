@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tetris</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="playfield">
+        <canvas id="board" width="300" height="600" aria-label="Tetris board"></canvas>
+      </section>
+      <aside class="sidebar" aria-live="polite">
+        <h1>Tetris</h1>
+        <p class="description">
+          Use the arrow keys to move and rotate pieces. Fill rows to clear them and
+          earn points.
+        </p>
+        <dl class="stats">
+          <div>
+            <dt>Score</dt>
+            <dd id="score">0</dd>
+          </div>
+          <div>
+            <dt>Lines</dt>
+            <dd id="lines">0</dd>
+          </div>
+          <div>
+            <dt>Level</dt>
+            <dd id="level">1</dd>
+          </div>
+        </dl>
+        <button id="restart" type="button">Restart</button>
+      </aside>
+    </main>
+    <script src="script.js"></script>
+  </body>
+</html>
