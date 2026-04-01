@@ -1,0 +1,307 @@
+/* ============================================================
+   Design tokens
+   ============================================================ */
+:root {
+  --bg-deep:   #0a0a0f;
+  --bg-body:   #0d0d16;
+  --bg-panel:  rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-blur: 14px;
+
+  /* Tetromino neon colors */
+  --color-I: #00f5ff;
+  --color-O: #ffe600;
+  --color-T: #bf00ff;
+  --color-S: #00ff6a;
+  --color-Z: #ff2250;
+  --color-J: #1a6fff;
+  --color-L: #ff8c00;
+  --color-ghost: rgba(255, 255, 255, 0.13);
+
+  --text-primary:   #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.42);
+  --text-label:     rgba(255, 255, 255, 0.30);
+
+  --font-main: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Courier New', 'Consolas', monospace;
+}
+
+/* ============================================================
+   Reset / base
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg-body);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -20%, rgba(0, 245, 255, 0.07) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 50% at 80% 100%, rgba(191, 0, 255, 0.05) 0%, transparent 70%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: var(--font-main);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+/* ============================================================
+   Game wrapper — three-column layout
+   ============================================================ */
+#game-wrapper {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  position: relative;
+}
+
+/* ============================================================
+   Side panels
+   ============================================================ */
+aside {
+  width: 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.panel-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-label);
+  align-self: flex-start;
+  width: 100%;
+}
+
+.stat-box span {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+  text-align: center;
+  display: block;
+}
+
+/* Mini canvases for hold / next */
+#hold-canvas,
+#next-canvas-0,
+#next-canvas-1,
+#next-canvas-2 {
+  display: block;
+  border-radius: 6px;
+}
+
+/* ============================================================
+   Main canvas
+   ============================================================ */
+#game-area {
+  position: relative;
+  flex-shrink: 0;
+}
+
+#game-canvas {
+  display: block;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px rgba(0, 245, 255, 0.06),
+    0 0 40px rgba(0, 245, 255, 0.07),
+    0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================================
+   Overlay / screens
+   ============================================================ */
+.screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+  z-index: 100;
+}
+
+.screen.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.screen-box {
+  background: rgba(10, 10, 20, 0.88);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 36px 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  min-width: 280px;
+  box-shadow: 0 0 60px rgba(0, 245, 255, 0.08);
+}
+
+.screen-title {
+  font-size: 2.6rem;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  background: linear-gradient(135deg, var(--color-I) 0%, var(--color-T) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.screen-subtitle {
+  font-size: 0.7rem;
+  letter-spacing: 0.35em;
+  color: var(--text-secondary);
+  margin-top: -10px;
+}
+
+.screen-score-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: var(--text-label);
+  margin-top: 4px;
+}
+
+.screen-score {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-I);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Controls grid on start screen */
+.controls-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 5px 18px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin: 4px 0;
+  align-self: stretch;
+}
+
+.controls-grid span:nth-child(odd) {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+}
+
+.controls-grid span:nth-child(even) {
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+   Button
+   ============================================================ */
+.btn {
+  background: rgba(0, 245, 255, 0.08);
+  border: 1px solid var(--color-I);
+  border-radius: 8px;
+  color: var(--color-I);
+  font-family: var(--font-main);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding: 10px 32px;
+  cursor: pointer;
+  transition: box-shadow 0.18s, background 0.18s;
+  outline: none;
+  margin-top: 4px;
+}
+
+.btn:hover {
+  background: rgba(0, 245, 255, 0.15);
+  box-shadow: 0 0 24px rgba(0, 245, 255, 0.45);
+}
+
+.btn:active {
+  background: rgba(0, 245, 255, 0.25);
+}
+
+/* ============================================================
+   Action label (back-to-back, combos, T-spin)
+   ============================================================ */
+#action-label {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #fff;
+  text-shadow: 0 0 18px var(--color-I);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 50;
+  white-space: nowrap;
+}
+
+#action-label.show {
+  opacity: 1;
+}
+
+/* ============================================================
+   Responsive scale for small screens
+   ============================================================ */
+@media (max-height: 700px), (max-width: 620px) {
+  #game-wrapper {
+    transform: scale(0.72);
+    transform-origin: top center;
+  }
+  body {
+    align-items: flex-start;
+    padding-top: 8px;
+  }
+}
+
+/* ============================================================
+   Line-clear flash animation (applied via JS to canvas overlay)
+   ============================================================ */
+@keyframes lineclear-flash {
+  0%   { opacity: 1; }
+  40%  { opacity: 0.85; filter: brightness(2.5); }
+  100% { opacity: 0; }
+}
+
+.lineclear-overlay {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+  animation: lineclear-flash 180ms ease-out forwards;
+  border-radius: 3px;
+}
