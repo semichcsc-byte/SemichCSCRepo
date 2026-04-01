@@ -10,32 +10,30 @@
 // ============================================================
 const COLS         = 10;
 const VISIBLE_ROWS = 20;
-const BUFFER_ROWS  = 2;          // hidden rows above visible field
+const BUFFER_ROWS  = 2;
 const BOARD_ROWS   = VISIBLE_ROWS + BUFFER_ROWS;
-const CELL         = 30;         // logical px per cell
+const CELL         = 30;
 
 const LOCK_DELAY_MS   = 500;
 const LOCK_MOVE_LIMIT = 15;
-const SOFT_DROP_MULT  = 20;      // gravity multiplier for soft drop
+const SOFT_DROP_MULT  = 20;
 const DAS_DELAY_MS    = 167;
 const ARR_MS          = 33;
 
 const LINES_PER_LEVEL = 10;
 const MAX_LEVEL       = 20;
 
-// ms per gravity tick per level (1-indexed, level 1 = index 0)
 const GRAVITY_TABLE = [
   800, 717, 633, 550, 467, 383, 300, 217, 133, 100,
    83,  83,  83,  67,  67,  67,  50,  50,  50,  33,
 ];
 
 // ============================================================
-// TETROMINO SHAPES  (4 rotation states × [dr,dc] from top-left of bounding box)
+// TETROMINO SHAPES
 // ============================================================
 const TETROMINOES = {
   I: {
     colorVar: '--color-I',
-    // 4×4 bounding box
     states: [
       [[1,0],[1,1],[1,2],[1,3]],
       [[0,2],[1,2],[2,2],[3,2]],
@@ -99,12 +97,10 @@ const TETROMINOES = {
   },
 };
 
-// Spawn column for each type (centres piece on 10-wide board)
 const SPAWN_COL = { I: 3, O: 4, T: 3, S: 3, Z: 3, J: 3, L: 3 };
 
 // ============================================================
 // SRS WALL-KICK TABLES
-// Key: "fromState>toState"  (0=spawn, R=CW90, 2=180, L=CCW90)
 // ============================================================
 const SRS_KICKS = {
   '0>R': [ [0,0],[-1,0],[-1, 1],[0,-2],[-1,-2] ],
@@ -165,7 +161,7 @@ const state = {
   level:   1,
   lines:   0,
 
-  phase: 'start',  // 'start' | 'playing' | 'lineclear' | 'paused' | 'gameover'
+  phase: 'start',
 
   lastTime:    0,
   gravAccum:   0,
@@ -174,23 +170,21 @@ const state = {
   lockMoves:   0,
 
   softDropping: false,
-  keysHeld:     {},   // action → { held: bool, dasTimer: 0, arrAccum: 0 }
+  keysHeld:     {},
 
   lastMoveWasRotation: false,
   lastKickIndex:       0,
-  lastClearSpecial:    false,  // back-to-back tracking
+  lastClearSpecial:    false,
 
-  // line-clear animation
   lcRows:      [],
   lcTimer:     0,
-  LC_DURATION: 180,   // ms
+  LC_DURATION: 180,
 
-  // game-over animation
   goTimer:    0,
   GO_DURATION: 650,
 
-  // combo
   combo: 0,
+  _pendingTSpin: 'none',
 };
 
 // ============================================================
@@ -215,11 +209,7 @@ function isValid(cells, board) {
 
 function getGhostRow(piece, board) {
   let row = piece.row;
-  while (true) {
-    const next = getCells({ ...piece, row: row + 1 });
-    if (!isValid(next, board)) break;
-    row++;
-  }
+  while (isValid(getCells({ ...piece, row: row + 1 }), board)) row++;
   return row;
 }
 
@@ -298,8 +288,7 @@ function resetLockDelay() {
 function hardDrop() {
   if (state.phase !== 'playing') return;
   const ghostRow = getGhostRow(state.piece, state.board);
-  const dist = ghostRow - state.piece.row;
-  state.score += dist * 2;
+  state.score += (ghostRow - state.piece.row) * 2;
   state.piece.row = ghostRow;
   lockPiece();
 }
@@ -311,7 +300,6 @@ function lockPiece() {
   }
 
   const tspinType = detectTSpin();
-
   const fullRows = [];
   for (let r = 0; r < BOARD_ROWS; r++) {
     if (state.board[r].every(c => c !== null)) fullRows.push(r);
@@ -325,28 +313,22 @@ function lockPiece() {
   } else {
     addScore(0, tspinType);
     state.combo = 0;
-    state.holdUsed = false;
     spawnNext();
   }
 }
 
 // ============================================================
-// T-SPIN DETECTION  (3-corner rule)
+// T-SPIN DETECTION
 // ============================================================
 function detectTSpin() {
   if (state.piece.type !== 'T' || !state.lastMoveWasRotation) return 'none';
   const { row, col } = state.piece;
-  // four corners of the 3×3 T bounding box
-  const corners = [
-    [row, col], [row, col+2], [row+2, col], [row+2, col+2],
-  ];
-  const occupied = corners.filter(([r, c]) =>
+  const corners = [[row,col],[row,col+2],[row+2,col],[row+2,col+2]];
+  const occupied = corners.filter(([r,c]) =>
     r < 0 || r >= BOARD_ROWS || c < 0 || c >= COLS || (r >= 0 && state.board[r][c] !== null)
   ).length;
-
   if (occupied < 3) return 'none';
-  if (state.lastKickIndex === 4) return 'mini';
-  return 'full';
+  return state.lastKickIndex === 4 ? 'mini' : 'full';
 }
 
 // ============================================================
@@ -373,7 +355,7 @@ function addScore(lines, tspinType) {
     else                  { base = BASE_SCORES.tspinTriple; label = 'T-SPIN TRIPLE'; }
   } else if (tspinType === 'mini') {
     isSpecial = true;
-    base  = BASE_SCORES.tspinMini;
+    base = BASE_SCORES.tspinMini;
     label = 'MINI T-SPIN';
   } else {
     if      (lines === 1) { base = BASE_SCORES.single; label = 'SINGLE'; }
@@ -385,9 +367,7 @@ function addScore(lines, tspinType) {
   const btbMult = (isSpecial && btb) ? 1.5 : 1;
   const comboBonus = state.combo > 0 ? 50 * state.combo * lv : 0;
 
-  if (base > 0) {
-    state.score += Math.floor(base * lv * btbMult) + comboBonus;
-  }
+  if (base > 0) state.score += Math.floor(base * lv * btbMult) + comboBonus;
 
   state.lastClearSpecial = isSpecial && lines > 0;
 
@@ -395,7 +375,7 @@ function addScore(lines, tspinType) {
     state.combo++;
     if (state.combo > 1) label += `  ×${state.combo} COMBO`;
     if (isSpecial && btb) label = 'BACK-TO-BACK ' + label;
-    flashActionLabel(label);
+    if (label) flashActionLabel(label);
   } else if (label) {
     flashActionLabel(label);
   }
@@ -407,21 +387,16 @@ function addScore(lines, tspinType) {
 }
 
 // ============================================================
-// LINE CLEAR (called after animation)
+// LINE CLEAR
 // ============================================================
 function applyLineClear() {
   const rows = state.lcRows;
-  for (const r of [...rows].sort((a, b) => b - a)) {
-    state.board.splice(r, 1);
-  }
-  for (let i = 0; i < rows.length; i++) {
-    state.board.unshift(new Array(COLS).fill(null));
-  }
+  for (const r of [...rows].sort((a, b) => b - a)) state.board.splice(r, 1);
+  for (let i = 0; i < rows.length; i++) state.board.unshift(new Array(COLS).fill(null));
   addScore(rows.length, state._pendingTSpin || 'none');
   state.lines += rows.length;
   state.level  = Math.min(Math.floor(state.lines / LINES_PER_LEVEL) + 1, MAX_LEVEL);
   state._pendingTSpin = 'none';
-  state.holdUsed = false;
   spawnNext();
   state.phase = 'playing';
 }
@@ -453,10 +428,7 @@ function holdPiece() {
 function applyGravity() {
   const moved = tryMove(1, 0);
   if (!moved) {
-    if (!state.lockActive) {
-      state.lockActive = true;
-      state.lockTimer  = 0;
-    }
+    if (!state.lockActive) { state.lockActive = true; state.lockTimer = 0; }
     if (state.softDropping) state.score += 1;
   } else {
     if (state.softDropping) state.score += 1;
@@ -466,7 +438,7 @@ function applyGravity() {
 }
 
 // ============================================================
-// INPUT
+// INPUT — shared action handlers (keyboard + touch)
 // ============================================================
 const KEY_ACTIONS = {
   ArrowLeft: 'left', a: 'left', A: 'left',
@@ -480,36 +452,26 @@ const KEY_ACTIONS = {
   p: 'pause', P: 'pause', Escape: 'pause',
 };
 
-function initInput() {
-  document.addEventListener('keydown', e => {
-    const action = KEY_ACTIONS[e.key];
-    if (!action) return;
-    e.preventDefault();
+function handleActionDown(action) {
+  if (action === 'pause') { togglePause(); return; }
+  if (state.phase !== 'playing') return;
+  if (state.keysHeld[action]) return;
 
-    if (action === 'pause') { togglePause(); return; }
-    if (state.phase !== 'playing') return;
+  state.keysHeld[action] = { dasTimer: 0, arrAccum: 0 };
+  switch (action) {
+    case 'left':      tryMove(0, -1); break;
+    case 'right':     tryMove(0,  1); break;
+    case 'rotateCW':  tryRotate('CW');  break;
+    case 'rotateCCW': tryRotate('CCW'); break;
+    case 'hardDrop':  hardDrop(); break;
+    case 'hold':      holdPiece(); break;
+    case 'softDrop':  state.softDropping = true; break;
+  }
+}
 
-    if (!state.keysHeld[action]) {
-      state.keysHeld[action] = { dasTimer: 0, arrAccum: 0 };
-      // Immediate action on first press
-      switch (action) {
-        case 'left':      tryMove(0, -1); break;
-        case 'right':     tryMove(0,  1); break;
-        case 'rotateCW':  tryRotate('CW');  break;
-        case 'rotateCCW': tryRotate('CCW'); break;
-        case 'hardDrop':  hardDrop(); break;
-        case 'hold':      holdPiece(); break;
-        case 'softDrop':  state.softDropping = true; break;
-      }
-    }
-  });
-
-  document.addEventListener('keyup', e => {
-    const action = KEY_ACTIONS[e.key];
-    if (!action) return;
-    delete state.keysHeld[action];
-    if (action === 'softDrop') state.softDropping = false;
-  });
+function handleActionUp(action) {
+  delete state.keysHeld[action];
+  if (action === 'softDrop') state.softDropping = false;
 }
 
 function processInput(dt) {
@@ -525,6 +487,55 @@ function processInput(dt) {
       if (action === 'right') tryMove(0,  1);
     }
   }
+}
+
+function initInput() {
+  document.addEventListener('keydown', e => {
+    const action = KEY_ACTIONS[e.key];
+    if (!action) return;
+    e.preventDefault();
+    handleActionDown(action);
+  });
+
+  document.addEventListener('keyup', e => {
+    const action = KEY_ACTIONS[e.key];
+    if (!action) return;
+    handleActionUp(action);
+  });
+}
+
+function initTouchControls() {
+  const bindings = {
+    'tc-left':      'left',
+    'tc-right':     'right',
+    'tc-softdrop':  'softDrop',
+    'tc-rotatecw':  'rotateCW',
+    'tc-rotateccw': 'rotateCCW',
+    'tc-harddrop':  'hardDrop',
+    'tc-hold':      'hold',
+  };
+
+  for (const [id, action] of Object.entries(bindings)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.addEventListener('touchstart', e => {
+      e.preventDefault();
+      handleActionDown(action);
+    }, { passive: false });
+    el.addEventListener('touchend', e => {
+      e.preventDefault();
+      handleActionUp(action);
+    }, { passive: false });
+    el.addEventListener('touchcancel', e => {
+      e.preventDefault();
+      handleActionUp(action);
+    }, { passive: false });
+  }
+
+  // Pause button on screens
+  document.getElementById('btn-start').addEventListener('touchstart',  e => { e.preventDefault(); startGame(); },   { passive: false });
+  document.getElementById('btn-resume').addEventListener('touchstart', e => { e.preventDefault(); togglePause(); }, { passive: false });
+  document.getElementById('btn-restart').addEventListener('touchstart',e => { e.preventDefault(); startGame(); },   { passive: false });
 }
 
 // ============================================================
@@ -562,6 +573,7 @@ function startGame() {
   state.phase     = 'playing';
   state.goTimer   = 0;
   state.lcRows    = [];
+  state.gravAccum = 0;
   try { state.hiScore = parseInt(localStorage.getItem('tetris-hiscore') || '0', 10) || 0; } catch (_) {}
   spawnNext();
   showScreen(null);
@@ -593,26 +605,36 @@ function flashActionLabel(text) {
 // ============================================================
 // RENDERING
 // ============================================================
-const canvas    = document.getElementById('game-canvas');
-const ctx       = canvas.getContext('2d');
-const holdCanvas = document.getElementById('hold-canvas');
-const holdCtx    = holdCanvas.getContext('2d');
+const canvas     = document.getElementById('game-canvas');
+const ctx        = canvas.getContext('2d');
+const holdCanvas  = document.getElementById('hold-canvas');
+const holdCtx     = holdCanvas.getContext('2d');
 const nextCanvases = [0,1,2].map(i => document.getElementById('next-canvas-' + i));
 const nextCtxs     = nextCanvases.map(c => c.getContext('2d'));
 
-// Resolved color cache (populated in setup)
+// Mobile mini canvases (may be null on desktop)
+let mbHoldCtx = null;
+let mbNextCtx = null;
+
 const COLORS = {};
 
 function resolveColors() {
   const style = getComputedStyle(document.documentElement);
   for (const type of ['I','O','T','S','Z','J','L']) {
-    const varName = TETROMINOES[type].colorVar;
-    COLORS[type] = style.getPropertyValue(varName).trim();
+    COLORS[type] = style.getPropertyValue(TETROMINOES[type].colorVar).trim();
   }
 }
 
+function colorAlpha(hex, a) {
+  if (!hex || hex.length < 7) return `rgba(100,100,100,${a})`;
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
 function setupCanvas() {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr  = window.devicePixelRatio || 1;
   const logW = COLS * CELL;
   const logH = VISIBLE_ROWS * CELL;
   canvas.width  = logW * dpr;
@@ -622,22 +644,47 @@ function setupCanvas() {
   ctx.scale(dpr, dpr);
 }
 
-// Draw a single filled cell at logical (col, row) on given context
+function setupMiniCanvases() {
+  const dpr = window.devicePixelRatio || 1;
+  const entries = [
+    [holdCanvas,      120, 120],
+    [nextCanvases[0], 120, 120],
+    [nextCanvases[1], 120,  80],
+    [nextCanvases[2], 120,  80],
+  ];
+  for (const [cv, w, h] of entries) {
+    cv.width  = w * dpr;
+    cv.height = h * dpr;
+    cv.style.width  = w + 'px';
+    cv.style.height = h + 'px';
+    cv.getContext('2d').scale(dpr, dpr);
+  }
+
+  // Mobile canvases
+  const mbHold = document.getElementById('mb-hold-canvas');
+  const mbNext = document.getElementById('mb-next-canvas');
+  if (mbHold && mbNext) {
+    for (const [cv, w, h] of [[mbHold, 64, 64],[mbNext, 64, 64]]) {
+      cv.width  = w * dpr;
+      cv.height = h * dpr;
+      cv.style.width  = w + 'px';
+      cv.style.height = h + 'px';
+      cv.getContext('2d').scale(dpr, dpr);
+    }
+    mbHoldCtx = mbHold.getContext('2d');
+    mbNextCtx = mbNext.getContext('2d');
+  }
+}
+
 function drawCell(c, x, y, color, alpha, glow) {
   c.save();
   c.globalAlpha = alpha ?? 1;
-  if (glow) {
-    c.shadowBlur  = 14;
-    c.shadowColor = color;
-  }
-  // Main fill with subtle gradient
+  if (glow) { c.shadowBlur = 14; c.shadowColor = color; }
   const grad = c.createLinearGradient(x, y, x + CELL, y + CELL);
   grad.addColorStop(0, color);
   grad.addColorStop(1, colorAlpha(color, 0.6));
   c.fillStyle = grad;
   c.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
-
-  // Inner highlight (top/left shine)
   c.shadowBlur = 0;
   c.fillStyle  = 'rgba(255,255,255,0.18)';
   c.fillRect(x + 2, y + 2, CELL - 4, 4);
@@ -645,28 +692,14 @@ function drawCell(c, x, y, color, alpha, glow) {
   c.restore();
 }
 
-function colorAlpha(hex, a) {
-  // hex is like #00f5ff; returns rgba
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  return `rgba(${r},${g},${b},${a})`;
-}
-
 function drawGrid() {
   ctx.strokeStyle = 'rgba(255,255,255,0.04)';
   ctx.lineWidth   = 0.5;
   for (let c = 0; c <= COLS; c++) {
-    ctx.beginPath();
-    ctx.moveTo(c * CELL, 0);
-    ctx.lineTo(c * CELL, VISIBLE_ROWS * CELL);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c * CELL, 0); ctx.lineTo(c * CELL, VISIBLE_ROWS * CELL); ctx.stroke();
   }
   for (let r = 0; r <= VISIBLE_ROWS; r++) {
-    ctx.beginPath();
-    ctx.moveTo(0, r * CELL);
-    ctx.lineTo(COLS * CELL, r * CELL);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, r * CELL); ctx.lineTo(COLS * CELL, r * CELL); ctx.stroke();
   }
 }
 
@@ -675,21 +708,19 @@ function drawBoard() {
     for (let c = 0; c < COLS; c++) {
       const colorVar = state.board[r][c];
       if (!colorVar) continue;
-      const type = colorVar.replace('--color-','');
-      const color = COLORS[type];
-      const visR = r - BUFFER_ROWS;
-      drawCell(ctx, c * CELL, visR * CELL, color, 1, false);
+      const color = COLORS[colorVar.replace('--color-', '')];
+      drawCell(ctx, c * CELL, (r - BUFFER_ROWS) * CELL, color, 1, false);
     }
   }
 }
 
-function drawPiece(piece, alpha, glow) {
-  if (!piece) return;
-  const color = COLORS[piece.type];
-  for (const [dr, dc] of TETROMINOES[piece.type].states[piece.rot]) {
-    const visR = (piece.row + dr) - BUFFER_ROWS;
+function drawActivePiece(alpha, glow) {
+  if (!state.piece) return;
+  const color = COLORS[state.piece.type];
+  for (const [dr, dc] of TETROMINOES[state.piece.type].states[state.piece.rot]) {
+    const visR = (state.piece.row + dr) - BUFFER_ROWS;
     if (visR < 0) continue;
-    drawCell(ctx, (piece.col + dc) * CELL, visR * CELL, color, alpha, glow);
+    drawCell(ctx, (state.piece.col + dc) * CELL, visR * CELL, color, alpha, glow);
   }
 }
 
@@ -713,15 +744,14 @@ function drawGhost() {
 }
 
 function drawLineClearAnim(progress) {
-  // progress: 0→1; flash then fade
   for (const r of state.lcRows) {
     const visR = r - BUFFER_ROWS;
     if (visR < 0) continue;
     const alpha = progress < 0.4 ? 1 : 1 - (progress - 0.4) / 0.6;
     ctx.save();
-    ctx.globalAlpha = alpha * 0.9;
+    ctx.globalAlpha = alpha * 0.92;
     ctx.fillStyle   = '#ffffff';
-    ctx.shadowBlur  = 28;
+    ctx.shadowBlur  = 30;
     ctx.shadowColor = '#ffffff';
     ctx.fillRect(0, visR * CELL + 1, COLS * CELL, CELL - 2);
     ctx.restore();
@@ -729,37 +759,30 @@ function drawLineClearAnim(progress) {
 }
 
 function drawGameOverAnim(progress) {
-  // Fill board rows from bottom to top progressively
   const rowsFilled = Math.ceil(progress * VISIBLE_ROWS);
   for (let i = 0; i < rowsFilled; i++) {
     const visR = VISIBLE_ROWS - 1 - i;
     ctx.save();
-    const a = Math.min(1, progress * 2.5);
-    ctx.globalAlpha = a * 0.82;
+    ctx.globalAlpha = Math.min(1, progress * 2.5) * 0.82;
     ctx.fillStyle   = '#0a0a0f';
     ctx.fillRect(0, visR * CELL, COLS * CELL, CELL);
     ctx.restore();
   }
 }
 
-// Mini canvas renderer for hold and next preview
 function drawMiniPiece(c, type, canvasW, canvasH, size) {
   const dpr = window.devicePixelRatio || 1;
   c.clearRect(0, 0, canvasW * dpr, canvasH * dpr);
   if (!type) return;
-  const color  = COLORS[type];
-  const cells  = TETROMINOES[type].states[0];
-
-  // Compute bounding box
+  const color = COLORS[type];
+  const cells = TETROMINOES[type].states[0];
   let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
   for (const [dr, dc] of cells) {
     minR = Math.min(minR, dr); maxR = Math.max(maxR, dr);
     minC = Math.min(minC, dc); maxC = Math.max(maxC, dc);
   }
-  const pieceW = (maxC - minC + 1) * size;
-  const pieceH = (maxR - minR + 1) * size;
-  const offX = (canvasW - pieceW) / 2;
-  const offY = (canvasH - pieceH) / 2;
+  const offX = (canvasW - (maxC - minC + 1) * size) / 2;
+  const offY = (canvasH - (maxR - minR + 1) * size) / 2;
 
   for (const [dr, dc] of cells) {
     const x = offX + (dc - minC) * size;
@@ -768,38 +791,41 @@ function drawMiniPiece(c, type, canvasW, canvasH, size) {
     const grad = c.createLinearGradient(x, y, x + size, y + size);
     grad.addColorStop(0, color);
     grad.addColorStop(1, colorAlpha(color, 0.6));
-    c.fillStyle = grad;
+    c.fillStyle   = grad;
     c.shadowBlur  = 8;
     c.shadowColor = color;
     c.fillRect(x + 1, y + 1, size - 2, size - 2);
-    c.fillStyle = 'rgba(255,255,255,0.18)';
     c.shadowBlur = 0;
+    c.fillStyle  = 'rgba(255,255,255,0.18)';
     c.fillRect(x + 2, y + 2, size - 4, 3);
     c.fillRect(x + 2, y + 5, 3, size - 7);
     c.restore();
   }
 }
 
-function setupMiniCanvases() {
-  const dpr = window.devicePixelRatio || 1;
-  [[holdCanvas, 120, 120], ...nextCanvases.map((cv, i) => [cv, 120, i === 0 ? 120 : 80])].forEach(([cv, w, h]) => {
-    cv.width  = w * dpr;
-    cv.height = h * dpr;
-    cv.style.width  = w + 'px';
-    cv.style.height = h + 'px';
-    cv.getContext('2d').scale(dpr, dpr);
-  });
-}
-
 function updateHUD() {
-  document.getElementById('score-value').textContent   = state.score.toLocaleString();
-  document.getElementById('hiscore-value').textContent = state.hiScore.toLocaleString();
-  document.getElementById('level-value').textContent   = state.level;
-  document.getElementById('lines-value').textContent   = state.lines;
+  const scoreStr   = state.score.toLocaleString();
+  const hiStr      = state.hiScore.toLocaleString();
+  const levelStr   = String(state.level);
+  const linesStr   = String(state.lines);
+
+  document.getElementById('score-value').textContent   = scoreStr;
+  document.getElementById('hiscore-value').textContent = hiStr;
+  document.getElementById('level-value').textContent   = levelStr;
+  document.getElementById('lines-value').textContent   = linesStr;
+
+  // Mobile bar
+  const mbScore   = document.getElementById('mb-score');
+  const mbLevel   = document.getElementById('mb-level');
+  const mbLines   = document.getElementById('mb-lines');
+  const mbHiscore = document.getElementById('mb-hiscore');
+  if (mbScore)   mbScore.textContent   = scoreStr;
+  if (mbLevel)   mbLevel.textContent   = levelStr;
+  if (mbLines)   mbLines.textContent   = linesStr;
+  if (mbHiscore) mbHiscore.textContent = hiStr;
 }
 
-function render(dt) {
-  // Clear
+function render() {
   ctx.clearRect(0, 0, COLS * CELL, VISIBLE_ROWS * CELL);
 
   drawGrid();
@@ -807,26 +833,28 @@ function render(dt) {
 
   if (state.phase === 'playing' || state.phase === 'paused') {
     drawGhost();
-    drawPiece(state.piece, 1, true);
+    drawActivePiece(1, true);
   }
 
   if (state.phase === 'lineclear') {
     drawGhost();
-    drawPiece(state.piece, 0.35, false);
-    const progress = Math.min(state.lcTimer / state.LC_DURATION, 1);
-    drawLineClearAnim(progress);
+    drawActivePiece(0.3, false);
+    drawLineClearAnim(Math.min(state.lcTimer / state.LC_DURATION, 1));
   }
 
   if (state.phase === 'gameover') {
-    const progress = Math.min(state.goTimer / state.GO_DURATION, 1);
-    drawGameOverAnim(progress);
+    drawGameOverAnim(Math.min(state.goTimer / state.GO_DURATION, 1));
   }
 
-  // Mini canvases
-  drawMiniPiece(holdCtx, state.holdPiece, 120, 120, 24);
+  // Desktop mini canvases
+  drawMiniPiece(holdCtx,    state.holdPiece,     120, 120, 24);
   drawMiniPiece(nextCtxs[0], state.nextQueue[0], 120, 120, 24);
-  drawMiniPiece(nextCtxs[1], state.nextQueue[1], 120, 80, 20);
-  drawMiniPiece(nextCtxs[2], state.nextQueue[2], 120, 80, 20);
+  drawMiniPiece(nextCtxs[1], state.nextQueue[1], 120,  80, 20);
+  drawMiniPiece(nextCtxs[2], state.nextQueue[2], 120,  80, 20);
+
+  // Mobile mini canvases
+  if (mbHoldCtx) drawMiniPiece(mbHoldCtx, state.holdPiece,    64, 64, 18);
+  if (mbNextCtx) drawMiniPiece(mbNextCtx, state.nextQueue[0], 64, 64, 18);
 
   updateHUD();
 }
@@ -861,16 +889,14 @@ function gameLoop(timestamp) {
 
   if (state.phase === 'lineclear') {
     state.lcTimer += dt;
-    if (state.lcTimer >= state.LC_DURATION) {
-      applyLineClear();
-    }
+    if (state.lcTimer >= state.LC_DURATION) applyLineClear();
   }
 
   if (state.phase === 'gameover') {
     state.goTimer += dt;
   }
 
-  render(dt);
+  render();
   requestAnimationFrame(gameLoop);
 }
 
@@ -884,13 +910,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   try { state.hiScore = parseInt(localStorage.getItem('tetris-hiscore') || '0', 10) || 0; } catch (_) {}
 
-  document.getElementById('btn-start').addEventListener('click', startGame);
-  document.getElementById('btn-resume').addEventListener('click', togglePause);
+  document.getElementById('btn-start').addEventListener('click',   startGame);
+  document.getElementById('btn-resume').addEventListener('click',  togglePause);
   document.getElementById('btn-restart').addEventListener('click', startGame);
 
   initInput();
-  showScreen('start');
+  initTouchControls();
 
+  showScreen('start');
   state.lastTime = performance.now();
   requestAnimationFrame(gameLoop);
 });

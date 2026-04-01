@@ -16,14 +16,12 @@
   --color-Z: #ff2250;
   --color-J: #1a6fff;
   --color-L: #ff8c00;
-  --color-ghost: rgba(255, 255, 255, 0.13);
 
   --text-primary:   #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.42);
   --text-label:     rgba(255, 255, 255, 0.30);
 
   --font-main: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Courier New', 'Consolas', monospace;
 }
 
 /* ============================================================
@@ -33,6 +31,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
@@ -51,6 +50,13 @@ body {
   font-family: var(--font-main);
   color: var(--text-primary);
   overflow: hidden;
+}
+
+/* ============================================================
+   App container
+   ============================================================ */
+#app {
+  display: contents;  /* transparent on desktop */
 }
 
 /* ============================================================
@@ -106,7 +112,6 @@ aside {
   display: block;
 }
 
-/* Mini canvases for hold / next */
 #hold-canvas,
 #next-canvas-0,
 #next-canvas-1,
@@ -131,6 +136,20 @@ aside {
     0 0 0 1px rgba(0, 245, 255, 0.06),
     0 0 40px rgba(0, 245, 255, 0.07),
     0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================================
+   Mobile info bar — hidden on desktop
+   ============================================================ */
+#mobile-bar {
+  display: none;
+}
+
+/* ============================================================
+   Touch controls — hidden on desktop
+   ============================================================ */
+#touch-controls {
+  display: none;
 }
 
 /* ============================================================
@@ -160,12 +179,13 @@ aside {
   background: rgba(10, 10, 20, 0.88);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
-  padding: 36px 44px;
+  padding: 32px 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  min-width: 280px;
+  gap: 14px;
+  min-width: 260px;
+  max-width: 90vw;
   box-shadow: 0 0 60px rgba(0, 245, 255, 0.08);
 }
 
@@ -181,10 +201,10 @@ aside {
 }
 
 .screen-subtitle {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   letter-spacing: 0.35em;
   color: var(--text-secondary);
-  margin-top: -10px;
+  margin-top: -8px;
 }
 
 .screen-score-label {
@@ -201,7 +221,6 @@ aside {
   font-variant-numeric: tabular-nums;
 }
 
-/* Controls grid on start screen */
 .controls-grid {
   display: grid;
   grid-template-columns: auto auto;
@@ -216,10 +235,6 @@ aside {
   color: var(--text-primary);
   font-weight: 600;
   text-align: right;
-}
-
-.controls-grid span:nth-child(even) {
-  color: var(--text-secondary);
 }
 
 /* ============================================================
@@ -239,6 +254,7 @@ aside {
   transition: box-shadow 0.18s, background 0.18s;
   outline: none;
   margin-top: 4px;
+  touch-action: manipulation;
 }
 
 .btn:hover {
@@ -251,7 +267,7 @@ aside {
 }
 
 /* ============================================================
-   Action label (back-to-back, combos, T-spin)
+   Action label
    ============================================================ */
 #action-label {
   position: fixed;
@@ -275,33 +291,195 @@ aside {
 }
 
 /* ============================================================
-   Responsive scale for small screens
+   MOBILE LAYOUT
+   Triggered when screen is narrow OR device is touch-only
    ============================================================ */
-@media (max-height: 700px), (max-width: 620px) {
-  #game-wrapper {
-    transform: scale(0.72);
-    transform-origin: top center;
-  }
+@media (max-width: 620px), (hover: none) and (pointer: coarse) {
   body {
     align-items: flex-start;
-    padding-top: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 6px 0 12px;
   }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: 8px;
+    contain: layout;
+  }
+
+  /* Hide desktop side panels */
+  aside { display: none !important; }
+
+  #game-wrapper {
+    gap: 0;
+  }
+
+  /* Show mobile info bar */
+  #mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 302px;
+    background: var(--bg-panel);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    padding: 8px 12px;
+  }
+
+  .mb-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .mb-label {
+    font-size: 0.55rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-label);
+  }
+
+  #mb-hold-canvas,
+  #mb-next-canvas {
+    display: block;
+    border-radius: 4px;
+  }
+
+  .mb-stats {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+  }
+
+  .mb-stat-row {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+
+  .mb-stat-row .mb-label {
+    font-size: 0.52rem;
+    width: 34px;
+    text-align: right;
+  }
+
+  .mb-stat-row span:last-child {
+    font-size: 0.92rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    min-width: 48px;
+  }
+
+  /* Show touch controls */
+  #touch-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 302px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .tc-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tc-fill { flex: 1; }
+
+  .tc-sep {
+    width: 1px;
+    height: 40px;
+    background: var(--glass-border);
+    margin: 0 2px;
+  }
+
+  .tc-btn {
+    background: var(--bg-panel);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-main);
+    font-size: 1.1rem;
+    font-weight: 700;
+    height: 52px;
+    min-width: 52px;
+    padding: 0 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: background 0.08s, box-shadow 0.08s;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .tc-btn:active {
+    background: rgba(0, 245, 255, 0.18);
+    box-shadow: 0 0 14px rgba(0, 245, 255, 0.35);
+  }
+
+  .tc-btn.tc-lg {
+    min-width: 64px;
+    font-size: 1.3rem;
+  }
+
+  .tc-btn.tc-rot {
+    font-size: 1.35rem;
+    min-width: 58px;
+  }
+
+  .tc-btn.tc-sm {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    height: 40px;
+    min-width: 72px;
+    padding: 0 12px;
+  }
+
+  .tc-btn.tc-accent {
+    border-color: var(--color-I);
+    color: var(--color-I);
+  }
+
+  .tc-btn.tc-accent:active {
+    background: rgba(0, 245, 255, 0.25);
+    box-shadow: 0 0 18px rgba(0, 245, 255, 0.5);
+  }
+
+  /* Hide keyboard controls hint on mobile */
+  #kb-controls { display: none; }
+
+  /* Adjust action label position on mobile */
+  #action-label { bottom: 200px; }
 }
 
 /* ============================================================
-   Line-clear flash animation (applied via JS to canvas overlay)
+   Tiny screens (very small phones)
    ============================================================ */
-@keyframes lineclear-flash {
-  0%   { opacity: 1; }
-  40%  { opacity: 0.85; filter: brightness(2.5); }
-  100% { opacity: 0; }
-}
-
-.lineclear-overlay {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  pointer-events: none;
-  animation: lineclear-flash 180ms ease-out forwards;
-  border-radius: 3px;
+@media (max-width: 320px) {
+  #game-canvas {
+    width: 280px !important;
+    height: 560px !important;
+  }
+  #mobile-bar,
+  #touch-controls {
+    width: 282px;
+  }
 }

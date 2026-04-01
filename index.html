@@ -2,61 +2,101 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Tetris</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <div id="game-wrapper">
+  <div id="app">
 
-    <!-- Left panel: Hold piece -->
-    <aside id="panel-left">
-      <div class="panel-box">
-        <div class="panel-label">HOLD</div>
-        <canvas id="hold-canvas" width="120" height="120"></canvas>
+    <!-- Mobile info bar (hidden on desktop) -->
+    <div id="mobile-bar">
+      <div class="mb-col">
+        <span class="mb-label">HOLD</span>
+        <canvas id="mb-hold-canvas" width="64" height="64"></canvas>
       </div>
-      <div class="panel-box stat-box">
-        <div class="panel-label">SCORE</div>
-        <span id="score-value">0</span>
+      <div class="mb-stats">
+        <div class="mb-stat-row"><span class="mb-label">SCORE</span><span id="mb-score">0</span></div>
+        <div class="mb-stat-row"><span class="mb-label">LVL</span><span id="mb-level">1</span></div>
+        <div class="mb-stat-row"><span class="mb-label">LINES</span><span id="mb-lines">0</span></div>
+        <div class="mb-stat-row"><span class="mb-label">BEST</span><span id="mb-hiscore">0</span></div>
       </div>
-      <div class="panel-box stat-box">
-        <div class="panel-label">BEST</div>
-        <span id="hiscore-value">0</span>
+      <div class="mb-col">
+        <span class="mb-label">NEXT</span>
+        <canvas id="mb-next-canvas" width="64" height="64"></canvas>
       </div>
-    </aside>
+    </div>
 
-    <!-- Main game canvas -->
-    <main id="game-area">
-      <canvas id="game-canvas" width="300" height="600"></canvas>
-    </main>
+    <!-- Three-column game layout -->
+    <div id="game-wrapper">
 
-    <!-- Right panel: Next pieces, level, lines -->
-    <aside id="panel-right">
-      <div class="panel-box">
-        <div class="panel-label">NEXT</div>
-        <canvas id="next-canvas-0" width="120" height="120"></canvas>
-        <canvas id="next-canvas-1" width="120" height="80"></canvas>
-        <canvas id="next-canvas-2" width="120" height="80"></canvas>
-      </div>
-      <div class="panel-box stat-box">
-        <div class="panel-label">LEVEL</div>
-        <span id="level-value">1</span>
-      </div>
-      <div class="panel-box stat-box">
-        <div class="panel-label">LINES</div>
-        <span id="lines-value">0</span>
-      </div>
-    </aside>
+      <!-- Left panel: Hold piece -->
+      <aside id="panel-left">
+        <div class="panel-box">
+          <div class="panel-label">HOLD</div>
+          <canvas id="hold-canvas" width="120" height="120"></canvas>
+        </div>
+        <div class="panel-box stat-box">
+          <div class="panel-label">SCORE</div>
+          <span id="score-value">0</span>
+        </div>
+        <div class="panel-box stat-box">
+          <div class="panel-label">BEST</div>
+          <span id="hiscore-value">0</span>
+        </div>
+      </aside>
 
-  </div>
+      <!-- Main game canvas -->
+      <main id="game-area">
+        <canvas id="game-canvas" width="300" height="600"></canvas>
+      </main>
+
+      <!-- Right panel: Next pieces, level, lines -->
+      <aside id="panel-right">
+        <div class="panel-box">
+          <div class="panel-label">NEXT</div>
+          <canvas id="next-canvas-0" width="120" height="120"></canvas>
+          <canvas id="next-canvas-1" width="120" height="80"></canvas>
+          <canvas id="next-canvas-2" width="120" height="80"></canvas>
+        </div>
+        <div class="panel-box stat-box">
+          <div class="panel-label">LEVEL</div>
+          <span id="level-value">1</span>
+        </div>
+        <div class="panel-box stat-box">
+          <div class="panel-label">LINES</div>
+          <span id="lines-value">0</span>
+        </div>
+      </aside>
+
+    </div><!-- #game-wrapper -->
+
+    <!-- Touch controls (hidden on desktop) -->
+    <div id="touch-controls">
+      <div class="tc-row">
+        <button class="tc-btn tc-sm" id="tc-hold">HOLD</button>
+        <span class="tc-fill"></span>
+        <button class="tc-btn tc-sm tc-accent" id="tc-harddrop">▼▼ DROP</button>
+      </div>
+      <div class="tc-row">
+        <button class="tc-btn tc-lg" id="tc-left">◄</button>
+        <button class="tc-btn" id="tc-softdrop">▼</button>
+        <button class="tc-btn tc-lg" id="tc-right">►</button>
+        <span class="tc-sep"></span>
+        <button class="tc-btn tc-rot" id="tc-rotateccw">↺</button>
+        <button class="tc-btn tc-rot" id="tc-rotatecw">↻</button>
+      </div>
+    </div>
+
+  </div><!-- #app -->
 
   <!-- Start screen -->
   <div id="screen-start" class="screen visible">
     <div class="screen-box">
       <div class="screen-title">TETRIS</div>
       <div class="screen-subtitle">MODERN EDITION</div>
-      <div class="controls-grid">
+      <div class="controls-grid" id="kb-controls">
         <span>←→ / A D</span><span>Move</span>
         <span>↑ / W</span><span>Rotate CW</span>
         <span>Z / Ctrl</span><span>Rotate CCW</span>
@@ -87,7 +127,7 @@
     </div>
   </div>
 
-  <!-- Action flash label (combo / back-to-back etc.) -->
+  <!-- Action flash label -->
   <div id="action-label"></div>
 
   <script src="game.js" defer></script>
