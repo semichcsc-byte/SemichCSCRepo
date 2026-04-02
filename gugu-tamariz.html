@@ -559,6 +559,33 @@ function playFootstepSfx() {
   noise.stop(t + 0.06);
 }
 
+function playFartSfx() {
+  if (!audioCtx || muted) return;
+  const t = audioCtx.currentTime;
+  // Low rumble
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  const dur = 0.15 + Math.random() * 0.3;
+  osc.frequency.setValueAtTime(60 + Math.random() * 40, t);
+  osc.frequency.linearRampToValueAtTime(40 + Math.random() * 30, t + dur);
+  g.gain.setValueAtTime(0.15, t);
+  g.gain.linearRampToValueAtTime(0.2, t + dur * 0.3);
+  g.gain.exponentialRampToValueAtTime(0.01, t + dur);
+  osc.connect(g); g.connect(masterGain);
+  osc.start(t); osc.stop(t + dur + 0.01);
+  // Squeaky high part
+  const osc2 = audioCtx.createOscillator();
+  const g2 = audioCtx.createGain();
+  osc2.type = 'sine';
+  osc2.frequency.setValueAtTime(200 + Math.random() * 150, t);
+  osc2.frequency.exponentialRampToValueAtTime(80, t + dur * 0.8);
+  g2.gain.setValueAtTime(0.06, t);
+  g2.gain.exponentialRampToValueAtTime(0.01, t + dur * 0.6);
+  osc2.connect(g2); g2.connect(masterGain);
+  osc2.start(t); osc2.stop(t + dur);
+}
+
 let sharkBitePlayed = false;
 function playSharkBiteSfx() {
   if (!audioCtx || muted || sharkBitePlayed) return;
@@ -607,8 +634,14 @@ let frameCount = 0;
 let difficulty = 1;
 let shakeTimer = 0;
 let splashParticles = [];
-let lives = 3;
+let lives = 12;
 let invincibleTimer = 0;
+
+// ── Poop & Fart system ──
+let poops = [];
+let fartClouds = [];
+let poopTimer = 0;
+let fartTimer = 0;
 let level = 1;
 let levelTimer = 0;
 let ambulanceX = 0;
@@ -627,9 +660,9 @@ let shoutFriendIdx = 0;
 
 // Level configs: distance goal, wave speed multiplier, obstacle speed multiplier, name
 const LEVELS = [
-  { goal: 30, waveSpeed: 0.15, obstSpeed: 1.4, name: 'Nível 1 — Fuga no Pontão' },
-  { goal: 50, waveSpeed: 0.20, obstSpeed: 1.7, name: 'Nível 2 — A Onda Cresce!' },
-  { goal: 80, waveSpeed: 0.25, obstSpeed: 2.0, name: 'Nível 3 — Corre para a Ambulância!' },
+  { goal: 80, waveSpeed: 0.15, obstSpeed: 1.4, name: 'Nível 1 — Fuga no Pontão' },
+  { goal: 150, waveSpeed: 0.20, obstSpeed: 1.7, name: 'Nível 2 — A Onda Cresce!' },
+  { goal: 250, waveSpeed: 0.25, obstSpeed: 2.0, name: 'Nível 3 — Corre para a Ambulância!' },
 ];
 
 // ── Pier / Ground ──
@@ -753,7 +786,7 @@ function startGame() {
   difficulty = 1;
   sardinesCollected = 0;
   bottlesCollected = 0;
-  lives = 3;
+  lives = 12;
   invincibleTimer = 0;
   level = 1;
   levelTimer = 0;
@@ -761,6 +794,10 @@ function startGame() {
   yeahPlayed = false;
   sharkBitePlayed = false;
   fireworks = [];
+  poops = [];
+  fartClouds = [];
+  poopTimer = 200 + Math.random() * 300;
+  fartTimer = 150 + Math.random() * 200;
   obstacles = [];
   sardines = [];
   bottles = [];
@@ -780,6 +817,9 @@ function startLevel(lvl) {
   splashParticles = [];
   gugu.reset();
   wave.reset();
+  // Start wave closer on higher levels so it's visible sooner
+  if (lvl === 2) wave.x = -100;
+  else if (lvl >= 3) wave.x = -50;
 }
 
 // ── Update ──
@@ -921,7 +961,7 @@ function update() {
   const lvlConf = LEVELS[level - 1];
   difficulty = 1 + frameCount / 9000;
   if (invincibleTimer > 0) invincibleTimer--;
-  score = Math.floor(frameCount / 18);
+  score = Math.floor(frameCount / 50);
 
   // Check level goal
   if (score >= LEVELS[level - 1].goal) {
@@ -957,7 +997,28 @@ function update() {
   // Wave
   wave.speed = lvlConf.waveSpeed + (difficulty - 1) * 0.08;
   wave.x += wave.speed * 0.25;
-  if (wave.x > gugu.x - 20) {
+  // Level 1: wave can't reach Gugu, it stays behind
+  if (level === 1 && wave.x > gugu.x - 60) {
+    wave.x = gugu.x - 60;
+  }
+  if (level === 2 && wave.x > gugu.x - 20) {
+    // Wave just splashes Gugu, no damage
+    shakeTimer = 10;
+    playHitSfx();
+    for (let i = 0; i < 20; i++) {
+      splashParticles.push({
+        x: gugu.x + gugu.w / 2,
+        y: gugu.y + gugu.h,
+        vx: (Math.random() - 0.5) * 8,
+        vy: -Math.random() * 10 - 2,
+        life: 40 + Math.random() * 30,
+        r: 3 + Math.random() * 4
+      });
+    }
+    // Wave pushes back a bit and continues
+    wave.x = gugu.x - 120;
+  }
+  if (level >= 3 && wave.x > gugu.x - 20) {
     lives--;
     shakeTimer = 18;
     playHitSfx();
@@ -1070,8 +1131,47 @@ function update() {
       b.collected = true;
       bottlesCollected++;
       score += 40;
-      playSambaSfx();
+      playGlugSfx();
     }
+  }
+
+  // Poop & farts (from fear!)
+  poopTimer--;
+  fartTimer--;
+  if (poopTimer <= 0) {
+    poops.push({
+      x: gugu.x + gugu.w / 2 - 4,
+      y: PIER_TOP() - 4,
+      life: 300
+    });
+    poopTimer = 400 + Math.random() * 500;
+  }
+  if (fartTimer <= 0) {
+    playFartSfx();
+    for (let i = 0; i < 5; i++) {
+      fartClouds.push({
+        x: gugu.x - 5 - Math.random() * 10,
+        y: gugu.y + 30 + Math.random() * 10,
+        r: 4 + Math.random() * 6,
+        vx: -0.5 - Math.random() * 0.8,
+        vy: -0.3 - Math.random() * 0.5,
+        life: 50 + Math.random() * 30
+      });
+    }
+    fartTimer = 250 + Math.random() * 400;
+  }
+  // Update poops
+  for (let i = poops.length - 1; i >= 0; i--) {
+    poops[i].life--;
+    if (poops[i].life <= 0) poops.splice(i, 1);
+  }
+  // Update fart clouds
+  for (let i = fartClouds.length - 1; i >= 0; i--) {
+    fartClouds[i].x += fartClouds[i].vx;
+    fartClouds[i].y += fartClouds[i].vy;
+    fartClouds[i].r += 0.1;
+    fartClouds[i].life--;
+    if (fartClouds[i].life <= 0) fartClouds.splice(i, 1);
   }
 }
 
@@ -1529,6 +1629,49 @@ function drawSplash() {
   ctx.globalAlpha = 1;
 }
 
+function drawPoopsAndFarts() {
+  // Draw poops on the pier
+  for (const p of poops) {
+    const alpha = Math.min(1, p.life / 60);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#6b3a1f';
+    // Little poop pile
+    ctx.beginPath();
+    ctx.arc(p.x + 4, p.y, 4, Math.PI, 0);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.x + 2, p.y - 3, 3, Math.PI, 0);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.x + 4, p.y - 5, 2, Math.PI, 0);
+    ctx.fill();
+    // Stink lines
+    ctx.strokeStyle = `rgba(120,180,50,${alpha * 0.5})`;
+    ctx.lineWidth = 1;
+    for (let s = 0; s < 3; s++) {
+      const sx = p.x + 1 + s * 3;
+      const wave = Math.sin(frameCount * 0.08 + s * 2) * 2;
+      ctx.beginPath();
+      ctx.moveTo(sx + wave, p.y - 6);
+      ctx.quadraticCurveTo(sx + wave + 2, p.y - 12, sx + wave, p.y - 18);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  // Draw fart clouds
+  for (const f of fartClouds) {
+    const alpha = f.life / 60;
+    ctx.fillStyle = `rgba(140,160,60,${alpha * 0.3})`;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(100,140,40,${alpha * 0.15})`;
+    ctx.beginPath();
+    ctx.arc(f.x + f.r * 0.4, f.y - f.r * 0.3, f.r * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawHUD() {
   const lvlConf = LEVELS[level - 1];
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -1551,7 +1694,7 @@ function drawHUD() {
   // Lives
   ctx.font = '13px sans-serif';
   ctx.fillStyle = '#fff';
-  ctx.fillText(`❤️`.repeat(lives) + `🖤`.repeat(Math.max(0, 3 - lives)), 20, 50);
+  ctx.fillText(`❤️`.repeat(lives) + `🖤`.repeat(Math.max(0, 12 - lives)), 20, 50);
   ctx.font = '12px sans-serif';
   ctx.fillText(`🐟 ${sardinesCollected}  🍺 ${bottlesCollected}  🏆 ${highScore}pts`, 20, 68);
   // Level name
@@ -2517,6 +2660,7 @@ function gameLoop() {
     drawObstacles();
     drawSardines();
     drawBottles();
+    drawPoopsAndFarts();
     if (state !== STATE.DROWNING) drawGugu();
     drawFriends();
     drawShouts();
