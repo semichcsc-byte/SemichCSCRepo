@@ -1162,7 +1162,7 @@ function update() {
       y: isFlying ? PIER_TOP() - 70 - Math.random() * 30 : isHole ? PIER_TOP() - 6 : PIER_TOP() - t.h,
       ...t, flying: isFlying
     });
-    obstacleTimer = Math.max(20, 47 - difficulty * 10) + Math.random() * 27;
+    obstacleTimer = Math.max(150, 300 - difficulty * 10) + Math.random() * 200;
   }
   for (let i = obstacles.length - 1; i >= 0; i--) {
     obstacles[i].x -= lvlConf.obstSpeed * difficulty * 0.75;
@@ -2762,7 +2762,7 @@ function gameLoop(timestamp) {
   ctx.fillStyle = 'rgba(255,0,0,0.8)';
   ctx.font = 'bold 12px sans-serif';
   const as = audioCtx ? audioCtx.state : 'NO_CTX';
-  ctx.fillText(`v1004 SOM:${as} S:${state} ${canvas.width}x${canvas.height}`, 5, canvas.height - 5);
+  ctx.fillText(`v1005 SOM:${as} S:${state} ${canvas.width}x${canvas.height}`, 5, canvas.height - 5);
 
   requestAnimationFrame(gameLoop);
 }
