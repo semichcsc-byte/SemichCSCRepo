@@ -106,11 +106,17 @@
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-// Responsive canvas
+// Responsive canvas (smaller on mobile for performance)
 function resize() {
-  canvas.width = Math.min(900, window.innerWidth - 40);
-  canvas.height = Math.min(500, window.innerHeight - 60);
+  if (isMobile) {
+    canvas.width = Math.min(600, window.innerWidth - 10);
+    canvas.height = Math.min(340, window.innerHeight - 30);
+  } else {
+    canvas.width = Math.min(900, window.innerWidth - 40);
+    canvas.height = Math.min(500, window.innerHeight - 60);
+  }
 }
 resize();
 window.addEventListener('resize', resize);
@@ -776,6 +782,8 @@ document.addEventListener('keyup', e => {
 
 function onTap(e) {
   e.preventDefault();
+  // Init/resume audio on every tap (mobile requirement)
+  initAudio();
   if (state === STATE.NAME_INPUT) return;
   jumpPressed = true; handleInput();
 }
@@ -792,6 +800,7 @@ document.body.addEventListener('touchstart', (e) => {
   if (e.target === nameInput || e.target === nameBtn) return;
   if (state === STATE.NAME_INPUT) return;
   e.preventDefault();
+  initAudio();
   jumpPressed = true; handleInput();
 }, { passive: false });
 document.body.addEventListener('touchend', (e) => {
@@ -1229,8 +1238,9 @@ function drawSky() {
   ctx.fillRect(0, 0, canvas.width, PIER_TOP());
 
   // Stars
+  const starCount = isMobile ? 10 : 30;
   const starSeed = [0.12,0.34,0.56,0.78,0.91,0.23,0.45,0.67,0.89,0.01,0.15,0.38,0.52,0.74,0.96,0.18,0.42,0.63,0.85,0.07,0.29,0.51,0.73,0.95,0.11,0.33,0.55,0.77,0.99,0.21];
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < starCount; i++) {
     const sx = starSeed[i] * canvas.width;
     const sy = starSeed[(i + 7) % 30] * PIER_TOP() * 0.7;
     const twinkle = 0.4 + Math.sin(frameCount * 0.03 + i * 2) * 0.4;
@@ -1263,24 +1273,28 @@ function drawOcean() {
   ctx.fillStyle = grad;
   ctx.fillRect(0, top, canvas.width, canvas.height - top);
 
-  // Moonlight reflection
-  const moonX = canvas.width * 0.8;
-  ctx.fillStyle = 'rgba(200,220,255,0.04)';
-  for (let i = 0; i < 8; i++) {
-    const rw = 20 - i * 2;
-    const ry = top + 10 + i * 14 + Math.sin(frameCount * 0.03 + i) * 3;
-    ctx.beginPath();
-    ctx.ellipse(moonX + Math.sin(frameCount * 0.02 + i) * 5, ry, rw, 2, 0, 0, Math.PI * 2);
-    ctx.fill();
+  // Moonlight reflection (skip on mobile)
+  if (!isMobile) {
+    const moonX = canvas.width * 0.8;
+    ctx.fillStyle = 'rgba(200,220,255,0.04)';
+    for (let i = 0; i < 8; i++) {
+      const rw = 20 - i * 2;
+      const ry = top + 10 + i * 14 + Math.sin(frameCount * 0.03 + i) * 3;
+      ctx.beginPath();
+      ctx.ellipse(moonX + Math.sin(frameCount * 0.02 + i) * 5, ry, rw, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // Small waves
   ctx.strokeStyle = 'rgba(100,160,220,0.1)';
   ctx.lineWidth = 2;
-  for (let row = 0; row < 5; row++) {
+  const waveRows = isMobile ? 2 : 5;
+  for (let row = 0; row < waveRows; row++) {
     ctx.beginPath();
     const wy = top + 20 + row * 18;
-    for (let x = 0; x < canvas.width; x += 4) {
+    const step = isMobile ? 8 : 4;
+    for (let x = 0; x < canvas.width; x += step) {
       const off = Math.sin((x + frameCount * 1.5 + row * 40) * 0.03) * 4;
       if (x === 0) ctx.moveTo(x, wy + off);
       else ctx.lineTo(x, wy + off);
@@ -1314,12 +1328,14 @@ function drawPier() {
   ctx.fillStyle = '#555';
   for (let x = 100; x < canvas.width; x += 200) {
     ctx.fillRect(x, top - 6 - 50, 3, 50);
-    // Lamp glow
-    const lg = ctx.createRadialGradient(x + 1, top - 58, 2, x + 1, top - 58, 35);
-    lg.addColorStop(0, 'rgba(255,220,130,0.35)');
-    lg.addColorStop(1, 'rgba(255,200,100,0)');
-    ctx.fillStyle = lg;
-    ctx.beginPath(); ctx.arc(x + 1, top - 58, 35, 0, Math.PI * 2); ctx.fill();
+    if (!isMobile) {
+      // Lamp glow (skip on mobile - radial gradients are slow)
+      const lg = ctx.createRadialGradient(x + 1, top - 58, 2, x + 1, top - 58, 35);
+      lg.addColorStop(0, 'rgba(255,220,130,0.35)');
+      lg.addColorStop(1, 'rgba(255,200,100,0)');
+      ctx.fillStyle = lg;
+      ctx.beginPath(); ctx.arc(x + 1, top - 58, 35, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.fillStyle = '#ffd070';
     ctx.beginPath(); ctx.arc(x + 1, top - 58, 4, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#555';
@@ -1441,17 +1457,19 @@ function drawWave() {
   ctx.fillStyle = waterGrad;
   ctx.fillRect(-10, top - 30, front + 10, h - top + 40);
 
-  // Surface ripple on the water body
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-  ctx.lineWidth = 1.5;
-  for (let row = 0; row < 3; row++) {
-    ctx.beginPath();
-    const ry = top - 10 + row * 16;
-    for (let x = 0; x < front; x += 5) {
-      const off = Math.sin((x + t * 30 + row * 50) * 0.04) * 3;
-      if (x === 0) ctx.moveTo(x, ry + off); else ctx.lineTo(x, ry + off);
+  // Surface ripple on the water body (skip on mobile)
+  if (!isMobile) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1.5;
+    for (let row = 0; row < 3; row++) {
+      ctx.beginPath();
+      const ry = top - 10 + row * 16;
+      for (let x = 0; x < front; x += 5) {
+        const off = Math.sin((x + t * 30 + row * 50) * 0.04) * 3;
+        if (x === 0) ctx.moveTo(x, ry + off); else ctx.lineTo(x, ry + off);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
   }
 
   // The big curling wave front
