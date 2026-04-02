@@ -264,6 +264,7 @@ function playHitSfx() {
 }
 
 function startWaveAmbient() {
+  try {
   if (!audioCtx || waveNoiseNode) return;
   // Looping ocean wave noise
   const bufSize = audioCtx.sampleRate * 3;
@@ -293,6 +294,7 @@ function startWaveAmbient() {
   filt.connect(waveNoiseGain);
   waveNoiseGain.connect(masterGain);
   waveNoiseNode.start();
+  } catch(e) {} // ignore audio errors on mobile
 }
 
 function stopWaveAmbient() {
@@ -779,11 +781,11 @@ function confirmName() {
 }
 
 function showNameInput() {
-  // On mobile, use simple prompt instead of overlay (more reliable)
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   if (isMobile) {
-    const name = prompt('Como te chamas?', playerName || 'Gugu');
-    playerName = (name || 'Gugu').trim().slice(0, 12);
+    // On mobile: skip prompt entirely (it kills iOS audio)
+    // Just use last name or default, start immediately
+    if (!playerName) playerName = 'Gugu';
+    initAudio();
     startGame();
     return;
   }
