@@ -157,12 +157,26 @@ muteBtn.addEventListener('click', (e) => {
 });
 
 function initAudio() {
-  if (audioCtx) return;
+  if (audioCtx) {
+    // Mobile browsers suspend AudioContext - resume on user gesture
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return;
+  }
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
   masterGain.gain.value = muted ? 0 : 0.4;
   masterGain.connect(audioCtx.destination);
+  // Resume immediately if suspended
+  if (audioCtx.state === 'suspended') audioCtx.resume();
 }
+
+// Resume audio on any touch/click (mobile requirement)
+document.addEventListener('touchstart', () => {
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}, { once: false });
+document.addEventListener('click', () => {
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}, { once: false });
 
 function playJumpSfx() {
   if (!audioCtx || muted) return;
