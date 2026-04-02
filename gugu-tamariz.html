@@ -936,25 +936,25 @@ function update() {
     gugu.y = PIER_TOP() - gugu.h;
     // Wave approaches during intro - visible from start
     if (introTimer === 1) wave.x = -50;
-    wave.x += 0.2;
+    wave.x += 0.5;
     // Diogo starts next to Gugu, then runs right
-    if (introTimer < 60) {
+    if (introTimer < 30) {
       introText = 'A onda vem aí!!';
-      diogoX += 0.3;
-      gugu.x += 0.3;
-    } else if (introTimer < 150) {
+      diogoX += 0.5;
+      gugu.x += 0.5;
+    } else if (introTimer < 70) {
       introText = 'O Diogo: "EU SAFO-ME!!"';
-      diogoX += 1.5;
-      gugu.x += 0.8;
-      if (introTimer % 8 === 0) playFootstepSfx();
-    } else if (introTimer < 280) {
+      diogoX += 4;
+      gugu.x += 1.5;
+      if (introTimer % 5 === 0) playFootstepSfx();
+    } else if (introTimer < 120) {
       introText = '';
-      diogoX += 2.5;
-      gugu.x += Math.max(0.1, 0.5 - (introTimer - 150) * 0.003);
-      if (introTimer % 6 === 0) playFootstepSfx();
-    } else if (introTimer < 360) {
+      diogoX += 6;
+      gugu.x += Math.max(0.2, 1 - (introTimer - 70) * 0.02);
+      if (introTimer % 4 === 0) playFootstepSfx();
+    } else if (introTimer < 155) {
       introText = 'O Gugu ficou para trás...';
-    } else if (introTimer < 440) {
+    } else if (introTimer < 190) {
       introText = 'CORRE GUGU!!';
     } else {
       gugu.x = 180;
@@ -2416,7 +2416,7 @@ function drawIntro() {
     drawDiogoRunning(diogoX, top - 44);
   }
   // Speech bubbles
-  if (introTimer > 60 && introTimer < 140) {
+  if (introTimer > 30 && introTimer < 65) {
     // Diogo's speech bubble
     const bText = 'EU SAFO-ME!!';
     ctx.font = 'bold 14px sans-serif';
@@ -2451,7 +2451,7 @@ function drawIntro() {
     ctx.textAlign = 'left';
   }
   // Dust behind Diogo
-  if (introTimer > 60 && introTimer < 280 && introTimer % 3 === 0) {
+  if (introTimer > 30 && introTimer < 120 && introTimer % 3 === 0) {
     ctx.fillStyle = 'rgba(200,180,150,0.15)';
     for (let d = 0; d < 3; d++) {
       ctx.beginPath();
@@ -2762,7 +2762,7 @@ function gameLoop(timestamp) {
   ctx.fillStyle = 'rgba(255,0,0,0.8)';
   ctx.font = 'bold 12px sans-serif';
   const as = audioCtx ? audioCtx.state : 'NO_CTX';
-  ctx.fillText(`v1006 SOM:${as} S:${state} ${canvas.width}x${canvas.height}`, 5, canvas.height - 5);
+  ctx.fillText(`v1007 SOM:${as} S:${state} ${canvas.width}x${canvas.height}`, 5, canvas.height - 5);
 
   requestAnimationFrame(gameLoop);
 }
