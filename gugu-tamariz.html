@@ -111,8 +111,8 @@ const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 // Responsive canvas (smaller on mobile for performance)
 function resize() {
   if (isMobile) {
-    canvas.width = Math.min(400, window.innerWidth - 5);
-    canvas.height = Math.min(250, window.innerHeight - 20);
+    canvas.width = Math.min(300, window.innerWidth - 5);
+    canvas.height = Math.min(180, window.innerHeight - 20);
   } else {
     canvas.width = Math.min(900, window.innerWidth - 40);
     canvas.height = Math.min(500, window.innerHeight - 60);
@@ -2769,10 +2769,24 @@ function drawShouts() {
 }
 
 // ── Main Loop ──
+let mobileFrameSkip = 0;
+
 function gameLoop(timestamp) {
-  // Single update per frame on mobile (no catching up)
-  update();
-  if (shakeTimer > 0) shakeTimer--;
+  // On mobile, only update+draw every other frame for performance
+  if (isMobile) {
+    mobileFrameSkip++;
+    if (mobileFrameSkip % 2 !== 0) {
+      requestAnimationFrame(gameLoop);
+      return;
+    }
+    // Run 2 updates per rendered frame to keep game speed
+    update();
+    update();
+    if (shakeTimer > 0) shakeTimer -= 2;
+  } else {
+    update();
+    if (shakeTimer > 0) shakeTimer--;
+  }
 
   // Draw once per frame
   ctx.save();
@@ -2781,23 +2795,31 @@ function gameLoop(timestamp) {
   }
 
   // Draw
-  drawSky();
-  drawClouds();
-  drawSkyline();
-  drawOcean();
+  if (isMobile) {
+    // Ultra-minimal draw for mobile
+    ctx.fillStyle = '#0a1525';
+    ctx.fillRect(0, 0, canvas.width, PIER_TOP());
+    ctx.fillStyle = '#0a2040';
+    ctx.fillRect(0, PIER_TOP(), canvas.width, canvas.height - PIER_TOP());
+  } else {
+    drawSky();
+    drawClouds();
+    drawSkyline();
+    drawOcean();
+  }
   drawPier();
 
   if (state === STATE.PLAYING || state === STATE.GAMEOVER || state === STATE.LEVELUP || state === STATE.DROWNING) {
     drawWave();
     drawObstacles();
-    drawSardines();
-    drawBottles();
+    if (!isMobile) drawSardines();
+    if (!isMobile) drawBottles();
     drawPoopsAndFarts();
     if (state !== STATE.DROWNING) drawGugu();
     drawFriends();
     drawShouts();
     drawSplash();
-    drawHUD();
+    if (!isMobile) drawHUD();
   }
 
   if (state === STATE.DROWNING) {
