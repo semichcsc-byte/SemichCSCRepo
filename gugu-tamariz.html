@@ -840,7 +840,7 @@ function handleInput() {
 
 function startGame() {
   initAudio();
-  startWaveAmbient();
+  if (!isMobile) startWaveAmbient();
   state = STATE.INTRO;
   introTimer = 0;
   diogoX = 120;
@@ -1156,6 +1156,7 @@ function update() {
   }
 
   // Sardines
+  if (!isMobile) {
   sardineTimer--;
   if (sardineTimer <= 0) {
     sardines.push({
@@ -1176,8 +1177,10 @@ function update() {
       score += 15;
     }
   }
+  } // end !isMobile sardines
 
   // Beer bottles (collectibles)
+  if (!isMobile) {
   bottleTimer--;
   if (bottleTimer <= 0) {
     bottles.push({
@@ -1199,8 +1202,10 @@ function update() {
       playGlugSfx();
     }
   }
+  } // end !isMobile bottles
 
-  // Poop & farts (from fear!)
+  // Poop & farts (from fear!) - skip on mobile
+  if (!isMobile) {
   poopTimer--;
   fartTimer--;
   if (poopTimer <= 0) {
@@ -1238,6 +1243,7 @@ function update() {
     fartClouds[i].life--;
     if (fartClouds[i].life <= 0) fartClouds.splice(i, 1);
   }
+  } // end !isMobile sardines+poop
 }
 
 // ── Draw Helpers ──
@@ -2796,13 +2802,12 @@ function gameLoop(timestamp) {
   // On mobile, only update+draw every other frame for performance
   if (isMobile) {
     mobileFrameSkip++;
-    if (mobileFrameSkip % 3 !== 0) {
+    if (mobileFrameSkip % 2 !== 0) {
       requestAnimationFrame(gameLoop);
       return;
     }
-    // Run 3 updates per rendered frame to keep game speed
-    update(); update(); update();
-    if (shakeTimer > 0) shakeTimer -= 3;
+    update();
+    if (shakeTimer > 0) shakeTimer--;
   } else {
     update();
     if (shakeTimer > 0) shakeTimer--;
