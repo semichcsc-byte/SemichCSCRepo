@@ -111,8 +111,8 @@ const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 // Responsive canvas (smaller on mobile for performance)
 function resize() {
   if (isMobile) {
-    canvas.width = Math.min(300, window.innerWidth - 5);
-    canvas.height = Math.min(180, window.innerHeight - 20);
+    canvas.width = Math.min(240, window.innerWidth - 5);
+    canvas.height = Math.min(140, window.innerHeight - 20);
   } else {
     canvas.width = Math.min(900, window.innerWidth - 40);
     canvas.height = Math.min(500, window.innerHeight - 60);
@@ -1633,6 +1633,17 @@ function drawWave() {
 
 function drawObstacles() {
   for (const o of obstacles) {
+    if (isMobile) {
+      // Ultra-simple obstacles on mobile
+      if (o.label === 'gaivota') {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(o.x, o.y, o.w, o.h * 0.6);
+      } else {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+      }
+      continue;
+    }
     if (o.label === 'gaivota') {
       // Seagull
       ctx.fillStyle = '#fff';
