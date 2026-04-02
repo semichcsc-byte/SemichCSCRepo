@@ -149,7 +149,7 @@ class Bag {
 // STATE
 // ============================================================
 const state = {
-  board:  [],
+  board:  createBoard(),
   piece:  null,
   bag:    null,
   nextQueue:  [],
