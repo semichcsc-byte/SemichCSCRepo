@@ -1,0 +1,2558 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gugu Foge da Onda — Pontão do Tamariz</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a1628;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    overflow: hidden;
+  }
+  canvas {
+    border-radius: 12px;
+    box-shadow: 0 0 40px rgba(0,150,255,0.3);
+    cursor: pointer;
+  }
+  #ui {
+    position: absolute;
+    top: 20px;
+    color: #fff;
+    font-size: 14px;
+    text-align: center;
+    pointer-events: none;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+  }
+  #ui h1 { font-size: 22px; margin-bottom: 4px; letter-spacing: 1px; }
+  #ui .sub { opacity: 0.7; font-size: 12px; }
+  #muteBtn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 18px;
+    cursor: pointer;
+    z-index: 10;
+    transition: background 0.2s;
+  }
+  #muteBtn:hover { background: rgba(0,0,0,0.7); }
+  #nameOverlay {
+    display: none;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,10,30,0.92);
+    border: 2px solid rgba(100,180,255,0.4);
+    border-radius: 16px;
+    padding: 30px 40px;
+    text-align: center;
+    z-index: 20;
+    color: #fff;
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+  #nameOverlay h2 { font-size: 22px; margin-bottom: 12px; }
+  #nameOverlay input {
+    font-size: 20px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 2px solid #4fc3f7;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    text-align: center;
+    outline: none;
+    width: 200px;
+  }
+  #nameOverlay input::placeholder { color: rgba(255,255,255,0.4); }
+  #nameOverlay button {
+    display: block;
+    margin: 14px auto 0;
+    padding: 10px 30px;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    background: #4fc3f7;
+    color: #000;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #nameOverlay button:hover { background: #81d4fa; }
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>🌊 Gugu Foge da Onda 🏃</h1>
+  <div class="sub">Pontão do Tamariz — Estoril</div>
+</div>
+<canvas id="game"></canvas>
+<button id="muteBtn">🔊</button>
+<div id="nameOverlay">
+  <h2>🌊 Como te chamas?</h2>
+  <input type="text" id="nameInput" placeholder="O teu nome" maxlength="12" autocomplete="off">
+  <button id="nameBtn">Vamos lá! 🏃</button>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// Responsive canvas
+function resize() {
+  canvas.width = Math.min(900, window.innerWidth - 40);
+  canvas.height = Math.min(500, window.innerHeight - 60);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Game State ──
+const STATE = { MENU: 0, PLAYING: 1, GAMEOVER: 2, LEVELUP: 3, WIN: 4, NAME_INPUT: 5, DROWNING: 6, INTRO: 7 };
+let state = STATE.MENU;
+
+// ── Intro cutscene ──
+let introTimer = 0;
+let diogoX = 0;
+let introText = '';
+
+// ── Leaderboard ──
+let playerName = '';
+let leaderboard = JSON.parse(localStorage.getItem('gugu_top10') || '[]');
+
+function saveToLeaderboard() {
+  const entry = { name: playerName || 'Gugu', score: score, level: level, sardines: sardinesCollected, bottles: bottlesCollected };
+  leaderboard.push(entry);
+  leaderboard.sort((a, b) => b.score - a.score);
+  leaderboard = leaderboard.slice(0, 10);
+  localStorage.setItem('gugu_top10', JSON.stringify(leaderboard));
+}
+
+// ── Drowning animation ──
+let drownTimer = 0;
+let drownBubbles = [];
+let drownSharks = [];
+
+// ── Sound Effects (Web Audio) ──
+let audioCtx = null;
+let masterGain = null;
+let muted = false;
+let waveNoiseNode = null;
+let waveNoiseGain = null;
+
+const muteBtn = document.getElementById('muteBtn');
+muteBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  muted = !muted;
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+  if (masterGain) masterGain.gain.value = muted ? 0 : 0.4;
+});
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = muted ? 0 : 0.4;
+  masterGain.connect(audioCtx.destination);
+}
+
+function playJumpSfx() {
+  if (!audioCtx || muted) return;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sine';
+  const t = audioCtx.currentTime;
+  osc.frequency.setValueAtTime(300, t);
+  osc.frequency.exponentialRampToValueAtTime(600, t + 0.12);
+  g.gain.setValueAtTime(0.25, t);
+  g.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+  osc.connect(g);
+  g.connect(masterGain);
+  osc.start(t);
+  osc.stop(t + 0.15);
+}
+
+function playHitSfx() {
+  if (!audioCtx || muted) return;
+  const t = audioCtx.currentTime;
+  // Impact noise
+  const bufSize = audioCtx.sampleRate * 0.3;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.1));
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buf;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.4, t);
+  g.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+  const filt = audioCtx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.value = 400;
+  noise.connect(filt);
+  filt.connect(g);
+  g.connect(masterGain);
+  noise.start(t);
+  noise.stop(t + 0.3);
+  // Low thud
+  const osc = audioCtx.createOscillator();
+  const og = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(80, t);
+  osc.frequency.exponentialRampToValueAtTime(30, t + 0.2);
+  og.gain.setValueAtTime(0.5, t);
+  og.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+  osc.connect(og);
+  og.connect(masterGain);
+  osc.start(t);
+  osc.stop(t + 0.3);
+}
+
+function startWaveAmbient() {
+  if (!audioCtx || waveNoiseNode) return;
+  // Looping ocean wave noise
+  const bufSize = audioCtx.sampleRate * 3;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  waveNoiseNode = audioCtx.createBufferSource();
+  waveNoiseNode.buffer = buf;
+  waveNoiseNode.loop = true;
+  // Bandpass to sound like waves
+  const filt = audioCtx.createBiquadFilter();
+  filt.type = 'bandpass';
+  filt.frequency.value = 500;
+  filt.Q.value = 0.5;
+  waveNoiseGain = audioCtx.createGain();
+  waveNoiseGain.gain.value = 0.06;
+  // LFO to modulate volume (wave rhythm)
+  const lfo = audioCtx.createOscillator();
+  const lfoGain = audioCtx.createGain();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.15;
+  lfoGain.gain.value = 0.04;
+  lfo.connect(lfoGain);
+  lfoGain.connect(waveNoiseGain.gain);
+  lfo.start();
+  waveNoiseNode.connect(filt);
+  filt.connect(waveNoiseGain);
+  waveNoiseGain.connect(masterGain);
+  waveNoiseNode.start();
+}
+
+function stopWaveAmbient() {
+  if (waveNoiseNode) {
+    try { waveNoiseNode.stop(); } catch(e) {}
+    waveNoiseNode = null;
+    waveNoiseGain = null;
+  }
+}
+
+let yeahPlayed = false;
+function playYeahSfx() {
+  if (!audioCtx || muted || yeahPlayed) return;
+  yeahPlayed = true;
+  const t = audioCtx.currentTime;
+  // Triumphant chord: C major rising
+  const freqs = [261.63, 329.63, 392, 523.25];
+  freqs.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    const start = t + i * 0.08;
+    g.gain.setValueAtTime(0.01, start);
+    g.gain.linearRampToValueAtTime(0.2, start + 0.1);
+    g.gain.linearRampToValueAtTime(0.15, start + 0.8);
+    g.gain.exponentialRampToValueAtTime(0.01, start + 1.5);
+    osc.connect(g);
+    g.connect(masterGain);
+    osc.start(start);
+    osc.stop(start + 1.5);
+  });
+  // Noise burst for "Yeah" texture
+  const bufSize = audioCtx.sampleRate * 0.4;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.3));
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buf;
+  const ng = audioCtx.createGain();
+  ng.gain.setValueAtTime(0.15, t);
+  ng.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+  const filt = audioCtx.createBiquadFilter();
+  filt.type = 'bandpass';
+  filt.frequency.value = 2000;
+  filt.Q.value = 1;
+  noise.connect(filt);
+  filt.connect(ng);
+  ng.connect(masterGain);
+  noise.start(t);
+  noise.stop(t + 0.5);
+}
+
+function playVictoryMusic() {
+  if (!audioCtx || muted) return;
+  const t = audioCtx.currentTime;
+  const tempo = 0.18;
+
+  // Silly carnival fanfare — "ta-da-da-da-DA-DA!"
+  const fanfare = [
+    [0, 392, 0.15],     // G
+    [1, 440, 0.15],     // A
+    [2, 494, 0.15],     // B
+    [3, 523, 0.2],      // C
+    [4.5, 587, 0.2],    // D
+    [6, 659, 0.5],      // E (hold)
+    [8, 784, 0.6],      // G high (BIG finish)
+  ];
+  fanfare.forEach(([beat, freq, dur]) => {
+    const st = t + beat * tempo;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.01, st);
+    g.gain.linearRampToValueAtTime(0.18, st + 0.02);
+    g.gain.setValueAtTime(0.15, st + dur * tempo - 0.02);
+    g.gain.exponentialRampToValueAtTime(0.01, st + dur * tempo);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(st); osc.stop(st + dur * tempo + 0.01);
+  });
+
+  // Funny "wah wah" trombone after fanfare
+  const wahStart = t + 10 * tempo;
+  for (let i = 0; i < 3; i++) {
+    const st = wahStart + i * 0.4;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(250 - i * 30, st);
+    osc.frequency.linearRampToValueAtTime(200 - i * 30, st + 0.15);
+    osc.frequency.linearRampToValueAtTime(260 - i * 30, st + 0.3);
+    g.gain.setValueAtTime(0.01, st);
+    g.gain.linearRampToValueAtTime(0.1, st + 0.03);
+    g.gain.linearRampToValueAtTime(0.08, st + 0.2);
+    g.gain.exponentialRampToValueAtTime(0.01, st + 0.35);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(st); osc.stop(st + 0.38);
+  }
+
+  // Clown honk / party horn
+  const honkStart = t + 11.5 * tempo;
+  for (let h = 0; h < 2; h++) {
+    const st = honkStart + h * 0.5;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(350, st);
+    osc.frequency.exponentialRampToValueAtTime(180, st + 0.12);
+    g.gain.setValueAtTime(0.2, st);
+    g.gain.exponentialRampToValueAtTime(0.01, st + 0.15);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(st); osc.stop(st + 0.18);
+  }
+
+  // Slide whistle going up (comedy effect)
+  const slideStart = t + 13 * tempo;
+  const slideOsc = audioCtx.createOscillator();
+  const slideG = audioCtx.createGain();
+  slideOsc.type = 'sine';
+  slideOsc.frequency.setValueAtTime(300, slideStart);
+  slideOsc.frequency.exponentialRampToValueAtTime(2000, slideStart + 0.6);
+  slideG.gain.setValueAtTime(0.1, slideStart);
+  slideG.gain.setValueAtTime(0.1, slideStart + 0.5);
+  slideG.gain.exponentialRampToValueAtTime(0.01, slideStart + 0.7);
+  slideOsc.connect(slideG); slideG.connect(masterGain);
+  slideOsc.start(slideStart); slideOsc.stop(slideStart + 0.75);
+
+  // Big final chord with shimmer
+  const chordStart = t + 16 * tempo;
+  [523, 659, 784, 1047].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = i < 2 ? 'triangle' : 'sine';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.01, chordStart);
+    g.gain.linearRampToValueAtTime(0.15, chordStart + 0.05);
+    g.gain.setValueAtTime(0.12, chordStart + 1.0);
+    g.gain.exponentialRampToValueAtTime(0.01, chordStart + 2.0);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(chordStart); osc.stop(chordStart + 2.0);
+  });
+
+  // Firework pop sounds
+  for (let i = 0; i < 5; i++) {
+    const st = t + 0.3 + i * 0.7;
+    const bufSize = audioCtx.sampleRate * 0.3;
+    const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let j = 0; j < bufSize; j++) d[j] = (Math.random() * 2 - 1) * Math.exp(-j / (bufSize * 0.08));
+    const n = audioCtx.createBufferSource(); n.buffer = buf;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.2, st);
+    g.gain.exponentialRampToValueAtTime(0.01, st + 0.25);
+    n.connect(g); g.connect(masterGain);
+    n.start(st); n.stop(st + 0.3);
+    // Whistle up before pop
+    const w = audioCtx.createOscillator();
+    const wg = audioCtx.createGain();
+    w.type = 'sine';
+    w.frequency.setValueAtTime(500, st - 0.2);
+    w.frequency.exponentialRampToValueAtTime(2500, st);
+    wg.gain.setValueAtTime(0.06, st - 0.2);
+    wg.gain.exponentialRampToValueAtTime(0.01, st + 0.02);
+    w.connect(wg); wg.connect(masterGain);
+    w.start(Math.max(t, st - 0.2)); w.stop(st + 0.05);
+  }
+}
+
+function playGlugSfx() {
+  if (!audioCtx || muted) return;
+  const t = audioCtx.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'sine';
+    const start = t + i * 0.1;
+    osc.frequency.setValueAtTime(300 + i * 60, start);
+    osc.frequency.exponentialRampToValueAtTime(150 + i * 30, start + 0.08);
+    g.gain.setValueAtTime(0.3, start);
+    g.gain.exponentialRampToValueAtTime(0.01, start + 0.1);
+    osc.connect(g);
+    g.connect(masterGain);
+    osc.start(start);
+    osc.stop(start + 0.12);
+  }
+}
+
+function playSambaSfx() {
+  if (!audioCtx || muted) return;
+  const t = audioCtx.currentTime;
+  const bpm = 130;
+  const beat = 60 / bpm;
+
+  // Upbeat bass groove (Axé/pagode style)
+  const bassLine = [130.81, 146.83, 164.81, 146.83, 130.81, 164.81, 196, 164.81];
+  bassLine.forEach((freq, i) => {
+    const st = t + i * beat * 0.5;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.2, st);
+    g.gain.exponentialRampToValueAtTime(0.01, st + beat * 0.45);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(st); osc.stop(st + beat * 0.5);
+  });
+
+  // Happy major melody (carnival whistle style)
+  const melody = [
+    [0, 523], [0.23, 587], [0.46, 659], [0.7, 784],
+    [0.93, 659], [1.1, 784], [1.35, 880], [1.58, 784],
+    [1.8, 880], [2.0, 1047], [2.3, 880], [2.5, 784],
+    [2.7, 880], [2.85, 1047], [3.0, 880], [3.2, 784],
+    [3.4, 659], [3.6, 784], [3.8, 880],
+  ];
+  melody.forEach(([offset, freq]) => {
+    const st = t + offset;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.01, st);
+    g.gain.linearRampToValueAtTime(0.14, st + 0.03);
+    g.gain.setValueAtTime(0.12, st + 0.15);
+    g.gain.exponentialRampToValueAtTime(0.01, st + 0.22);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(st); osc.stop(st + 0.23);
+  });
+
+  // Batucada percussion — fast shaker
+  for (let i = 0; i < 32; i++) {
+    const st = t + i * beat * 0.25;
+    if (st > t + 4) break;
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.04, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let j = 0; j < d.length; j++) d[j] = (Math.random() * 2 - 1) * Math.exp(-j / (d.length * 0.12));
+    const n = audioCtx.createBufferSource(); n.buffer = buf;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(i % 2 === 0 ? 0.15 : 0.08, st);
+    g.gain.exponentialRampToValueAtTime(0.01, st + 0.03);
+    const f = audioCtx.createBiquadFilter();
+    f.type = 'highpass'; f.frequency.value = 4000;
+    n.connect(f); f.connect(g); g.connect(masterGain);
+    n.start(st); n.stop(st + 0.04);
+  }
+
+  // Surdo boom on strong beats
+  for (let i = 0; i < 8; i++) {
+    const st = t + i * beat;
+    if (st > t + 4) break;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(i % 2 === 0 ? 80 : 65, st);
+    osc.frequency.exponentialRampToValueAtTime(35, st + 0.2);
+    g.gain.setValueAtTime(i % 2 === 0 ? 0.3 : 0.15, st);
+    g.gain.exponentialRampToValueAtTime(0.01, st + 0.25);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(st); osc.stop(st + 0.25);
+  }
+
+  // Firework explosion sounds
+  for (let i = 0; i < 4; i++) {
+    const st = t + 0.5 + i * 0.9;
+    const bufSize = audioCtx.sampleRate * 0.5;
+    const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let j = 0; j < bufSize; j++) d[j] = (Math.random() * 2 - 1) * Math.exp(-j / (bufSize * 0.15));
+    const n = audioCtx.createBufferSource(); n.buffer = buf;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.01, st);
+    g.gain.linearRampToValueAtTime(0.25, st + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.01, st + 0.4);
+    const f = audioCtx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 1500; f.Q.value = 0.5;
+    n.connect(f); f.connect(g); g.connect(masterGain);
+    n.start(st); n.stop(st + 0.5);
+    // Whistle up
+    const w = audioCtx.createOscillator();
+    const wg = audioCtx.createGain();
+    w.type = 'sine';
+    w.frequency.setValueAtTime(400, st - 0.3);
+    w.frequency.exponentialRampToValueAtTime(2000, st);
+    wg.gain.setValueAtTime(0.08, st - 0.3);
+    wg.gain.exponentialRampToValueAtTime(0.01, st + 0.05);
+    w.connect(wg); wg.connect(masterGain);
+    w.start(Math.max(t, st - 0.3)); w.stop(st + 0.05);
+  }
+}
+
+function playFootstepSfx() {
+  if (!audioCtx || muted) return;
+  const t = audioCtx.currentTime;
+  // Quick slap sound
+  const bufSize = audioCtx.sampleRate * 0.06;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.15));
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buf;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.15, t);
+  g.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+  const filt = audioCtx.createBiquadFilter();
+  filt.type = 'highpass';
+  filt.frequency.value = 800;
+  noise.connect(filt);
+  filt.connect(g);
+  g.connect(masterGain);
+  noise.start(t);
+  noise.stop(t + 0.06);
+}
+
+let sharkBitePlayed = false;
+function playSharkBiteSfx() {
+  if (!audioCtx || muted || sharkBitePlayed) return;
+  sharkBitePlayed = true;
+  const t = audioCtx.currentTime;
+  // Crunch/bite
+  for (let i = 0; i < 3; i++) {
+    const start = t + i * 0.15;
+    const bufSize = audioCtx.sampleRate * 0.15;
+    const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let j = 0; j < bufSize; j++) data[j] = (Math.random() * 2 - 1) * Math.exp(-j / (bufSize * 0.08));
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buf;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.4, start);
+    g.gain.exponentialRampToValueAtTime(0.01, start + 0.12);
+    const filt = audioCtx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.value = 600;
+    noise.connect(filt);
+    filt.connect(g);
+    g.connect(masterGain);
+    noise.start(start);
+    noise.stop(start + 0.15);
+  }
+  // Scream
+  const scream = audioCtx.createOscillator();
+  const sg = audioCtx.createGain();
+  scream.type = 'sawtooth';
+  scream.frequency.setValueAtTime(600, t + 0.1);
+  scream.frequency.linearRampToValueAtTime(900, t + 0.3);
+  scream.frequency.linearRampToValueAtTime(400, t + 0.8);
+  sg.gain.setValueAtTime(0.01, t + 0.1);
+  sg.gain.linearRampToValueAtTime(0.15, t + 0.25);
+  sg.gain.exponentialRampToValueAtTime(0.01, t + 0.9);
+  scream.connect(sg);
+  sg.connect(masterGain);
+  scream.start(t + 0.1);
+  scream.stop(t + 1.0);
+}
+
+let score = 0;
+let highScore = +(localStorage.getItem('gugu_hi') || 0);
+let frameCount = 0;
+let difficulty = 1;
+let shakeTimer = 0;
+let splashParticles = [];
+let lives = 3;
+let invincibleTimer = 0;
+let level = 1;
+let levelTimer = 0;
+let ambulanceX = 0;
+let winTimer = 0;
+
+// ── Friends shouting ──
+const SHOUTS = [
+  'CORRE GUGU!!', 'FOGE!!', 'CUIDADO!!', 'MAIS RÁPIDO!!',
+  'AI AI AI!!', 'A ONDA!!', 'TÁS BEBO!!', 'SALTA!!',
+  'AHAHAHA!!', 'VAI VAI VAI!!', 'Ó GUGU!!', 'ESTÁS FEITO!!',
+  'É AGORA!!', 'NÃO PARES!!'
+];
+let shoutText = '';
+let shoutTimer = 0;
+let shoutFriendIdx = 0;
+
+// Level configs: distance goal, wave speed multiplier, obstacle speed multiplier, name
+const LEVELS = [
+  { goal: 30, waveSpeed: 0.15, obstSpeed: 1.4, name: 'Nível 1 — Fuga no Pontão' },
+  { goal: 50, waveSpeed: 0.20, obstSpeed: 1.7, name: 'Nível 2 — A Onda Cresce!' },
+  { goal: 80, waveSpeed: 0.25, obstSpeed: 2.0, name: 'Nível 3 — Corre para a Ambulância!' },
+];
+
+// ── Pier / Ground ──
+const PIER_COLOR = '#8B7355';
+const PIER_DARK = '#6B5740';
+const PIER_TOP = () => canvas.height * 0.72;
+const PIER_RAIL_H = 18;
+
+// ── Gugu (the runner) ──
+const gugu = {
+  x: 180,
+  w: 28, h: 48,
+  vy: 0,
+  grounded: true,
+  frame: 0,
+  animTimer: 0,
+  doubleJump: false,
+  reset() {
+    this.x = 180;
+    this.y = PIER_TOP() - this.h;
+    this.vy = 0;
+    this.grounded = true;
+    this.frame = 0;
+    this.doubleJump = false;
+  }
+};
+
+// ── Wave ──
+const wave = {
+  x: -300,
+  speed: 0.15,
+  baseSpeed: 0.15,
+  amplitude: 30,
+  reset() {
+    this.x = -300;
+    this.speed = this.baseSpeed;
+  }
+};
+
+// ── Obstacles ──
+let obstacles = [];
+const OBS_TYPES = {
+  SEAGULL: { w: 36, h: 24, color: '#eee',    label: 'gaivota' },
+  HOLE:    { w: 40, h: 12, color: '#222',     label: 'buraco' },
+};
+let obstacleTimer = 0;
+
+// ── Collectables ──
+let sardines = [];
+let sardineTimer = 0;
+let sardinesCollected = 0;
+let bottles = [];
+let bottleTimer = 0;
+let bottlesCollected = 0;
+
+// ── Input ──
+let jumpPressed = false;
+const nameOverlay = document.getElementById('nameOverlay');
+const nameInput = document.getElementById('nameInput');
+const nameBtn = document.getElementById('nameBtn');
+
+function showNameInput() {
+  state = STATE.NAME_INPUT;
+  nameOverlay.style.display = 'block';
+  nameInput.value = playerName;
+  nameInput.focus();
+}
+
+function confirmName() {
+  playerName = nameInput.value.trim().slice(0, 12) || 'Gugu';
+  nameOverlay.style.display = 'none';
+  startGame();
+}
+
+nameBtn.addEventListener('click', (e) => { e.stopPropagation(); confirmName(); });
+nameInput.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') confirmName();
+});
+
+document.addEventListener('keydown', e => {
+  if (state === STATE.NAME_INPUT) return;
+  if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); jumpPressed = true; handleInput(); }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') jumpPressed = false;
+});
+canvas.addEventListener('pointerdown', () => {
+  if (state === STATE.NAME_INPUT) return;
+  jumpPressed = true; handleInput();
+});
+canvas.addEventListener('pointerup', () => { jumpPressed = false; });
+
+function handleInput() {
+  if (state === STATE.MENU) { showNameInput(); return; }
+  if (state === STATE.GAMEOVER) { showNameInput(); return; }
+  if (state === STATE.WIN) { showNameInput(); return; }
+  if (state === STATE.LEVELUP || state === STATE.DROWNING) return;
+  if (gugu.grounded) {
+    gugu.vy = -10;
+    gugu.grounded = false;
+    gugu.doubleJump = false;
+    playJumpSfx();
+  } else if (!gugu.doubleJump) {
+    gugu.vy = -8;
+    gugu.doubleJump = true;
+    playJumpSfx();
+  }
+}
+
+function startGame() {
+  initAudio();
+  startWaveAmbient();
+  state = STATE.INTRO;
+  introTimer = 0;
+  diogoX = 120;
+  introText = '';
+  gugu.x = 100;
+  score = 0;
+  frameCount = 0;
+  difficulty = 1;
+  sardinesCollected = 0;
+  bottlesCollected = 0;
+  lives = 3;
+  invincibleTimer = 0;
+  level = 1;
+  levelTimer = 0;
+  winTimer = 0;
+  yeahPlayed = false;
+  sharkBitePlayed = false;
+  fireworks = [];
+  obstacles = [];
+  sardines = [];
+  bottles = [];
+  splashParticles = [];
+  gugu.reset();
+  wave.reset();
+}
+
+function startLevel(lvl) {
+  level = lvl;
+  frameCount = 0;
+  difficulty = 1;
+  invincibleTimer = 0;
+  obstacles = [];
+  sardines = [];
+  bottles = [];
+  splashParticles = [];
+  gugu.reset();
+  wave.reset();
+}
+
+// ── Update ──
+function update() {
+  // Intro cutscene
+  if (state === STATE.INTRO) {
+    introTimer++;
+    frameCount++;
+    // Wave approaches during intro - visible from start
+    if (introTimer === 1) wave.x = -50;
+    wave.x += 0.08;
+    // Diogo starts next to Gugu, then runs right
+    if (introTimer < 200) {
+      introText = 'A onda vem aí!!';
+      diogoX += 0.1;
+      gugu.x += 0.1;
+    } else if (introTimer < 500) {
+      introText = 'O Diogo: "EU SAFO-ME!!"';
+      diogoX += 0.5;
+      gugu.x += 0.3;
+      if (introTimer % 12 === 0) playFootstepSfx();
+    } else if (introTimer < 900) {
+      introText = '';
+      diogoX += 0.7;
+      // Gugu tries to keep up but stumbles and slows down
+      gugu.x += Math.max(0.05, 0.25 - (introTimer - 500) * 0.0005);
+      if (introTimer % 10 === 0) playFootstepSfx();
+    } else if (introTimer < 1150) {
+      introText = 'O Gugu ficou para trás...';
+      // Gugu stops, exhausted
+    } else if (introTimer < 1400) {
+      introText = 'CORRE GUGU!!';
+    } else {
+      gugu.x = 180;
+      state = STATE.PLAYING;
+    }
+    // Animate Gugu running during intro
+    gugu.animTimer++;
+    if (gugu.animTimer > 7) { gugu.animTimer = 0; gugu.frame = (gugu.frame + 1) % 4; }
+    return;
+  }
+  // Level-up countdown
+  if (state === STATE.LEVELUP) {
+    levelTimer--;
+    if (levelTimer <= 0) {
+      startLevel(level + 1);
+      state = STATE.PLAYING;
+    }
+    return;
+  }
+  // Win animation
+  if (state === STATE.WIN) {
+    winTimer++;
+    // Move Gugu toward ambulance
+    if (gugu.x < ambulanceX - 5) gugu.x += 1.5;
+    else if (!yeahPlayed) { playYeahSfx(); playVictoryMusic(); }
+    gugu.animTimer++;
+    if (gugu.animTimer > 8) { gugu.animTimer = 0; gugu.frame = (gugu.frame + 1) % 4; }
+    return;
+  }
+  // Drowning animation
+  if (state === STATE.DROWNING) {
+    drownTimer++;
+    frameCount++;
+    // Shark bite sound when blood starts
+    if (drownTimer === 200) playSharkBiteSfx();
+    // Wave pushes Gugu left into the sea
+    if (drownTimer < 60) {
+      wave.x += 2;
+      gugu.x -= 1.5;
+    }
+    // Gugu sinks very slowly
+    if (drownTimer < 600) gugu.y += 0.08;
+    // Sharks circle and approach
+    if (drownTimer === 1) {
+      // Spawn sharks
+      drownSharks = [
+        { x: gugu.x - 200, y: PIER_TOP() + 15, dir: 1, speed: 0.6 + Math.random() * 0.3, phase: 0 },
+        { x: gugu.x + 250, y: PIER_TOP() + 30, dir: -1, speed: 0.5 + Math.random() * 0.3, phase: Math.PI },
+        { x: gugu.x - 300, y: PIER_TOP() + 45, dir: 1, speed: 0.4 + Math.random() * 0.2, phase: Math.PI * 0.5 },
+      ];
+    }
+    // Move sharks - circle closer very slowly
+    for (const s of drownSharks) {
+      s.phase += 0.01;
+      const targetX = gugu.x + gugu.w / 2;
+      const targetY = gugu.y + 20;
+      const circleR = Math.max(15, 150 - drownTimer * 0.25);
+      const destX = targetX + Math.cos(s.phase) * circleR;
+      const destY = targetY + Math.sin(s.phase) * circleR * 0.4;
+      s.x += (destX - s.x) * 0.015;
+      s.y += (destY - s.y) * 0.015;
+      s.dir = (destX - s.x) > 0 ? 1 : -1;
+    }
+    // Lots of bubbles
+    if (drownTimer % 4 === 0 && drownTimer < 500) {
+      for (let j = 0; j < 2; j++) {
+        drownBubbles.push({
+          x: gugu.x + gugu.w / 2 + (Math.random() - 0.5) * 30,
+          y: gugu.y + 10 + Math.random() * 20,
+          r: 1.5 + Math.random() * 5,
+          vy: -0.8 - Math.random() * 1.2,
+          life: 60 + Math.random() * 40
+        });
+      }
+    }
+    // Blood particles after sharks get close
+    if (drownTimer > 200 && drownTimer < 650) {
+      // More blood, every frame after 300
+      const bloodFreq = drownTimer > 300 ? 1 : 2;
+      if (drownTimer % bloodFreq === 0) {
+        for (let b = 0; b < (drownTimer > 350 ? 3 : 1); b++) {
+          drownBubbles.push({
+            x: gugu.x + gugu.w / 2 + (Math.random() - 0.5) * 35,
+            y: gugu.y + Math.random() * 35,
+            r: 3 + Math.random() * 8,
+            vy: -0.2 - Math.random() * 0.4,
+            life: 90 + Math.random() * 50,
+            blood: true
+          });
+        }
+      }
+    }
+    for (let i = drownBubbles.length - 1; i >= 0; i--) {
+      drownBubbles[i].y += drownBubbles[i].vy;
+      drownBubbles[i].x += Math.sin(frameCount * 0.08 + i) * 0.4;
+      drownBubbles[i].life--;
+      if (drownBubbles[i].life <= 0) drownBubbles.splice(i, 1);
+    }
+    // After long dramatic sinking, show game over
+    if (drownTimer > 750) {
+      saveToLeaderboard();
+      state = STATE.GAMEOVER;
+    }
+    return;
+  }
+  if (state !== STATE.PLAYING) return;
+  frameCount++;
+  const lvlConf = LEVELS[level - 1];
+  difficulty = 1 + frameCount / 9000;
+  if (invincibleTimer > 0) invincibleTimer--;
+  score = Math.floor(frameCount / 18);
+
+  // Check level goal
+  if (score >= LEVELS[level - 1].goal) {
+    if (level < 3) {
+      state = STATE.LEVELUP;
+      levelTimer = 150; // ~2.5 seconds
+    } else {
+      // Level 3 complete — win! Place ambulance at end of pier
+      state = STATE.WIN;
+      winTimer = 0;
+      ambulanceX = canvas.width - 120;
+      if (score > highScore) { highScore = score; localStorage.setItem('gugu_hi', highScore); }
+      saveToLeaderboard();
+    }
+    return;
+  }
+
+  // Gugu physics
+  gugu.vy += 0.28;
+  gugu.y += gugu.vy;
+  // Clamp to screen top
+  if (gugu.y < 0) { gugu.y = 0; if (gugu.vy < 0) gugu.vy = 0; }
+  const ground = PIER_TOP() - gugu.h;
+  if (gugu.y >= ground) {
+    gugu.y = ground;
+    gugu.vy = 0;
+    gugu.grounded = true;
+    gugu.doubleJump = false;
+  }
+  gugu.animTimer++;
+  if (gugu.animTimer > 6) { gugu.animTimer = 0; gugu.frame = (gugu.frame + 1) % 4; }
+
+  // Wave
+  wave.speed = lvlConf.waveSpeed + (difficulty - 1) * 0.08;
+  wave.x += wave.speed * 0.25;
+  if (wave.x > gugu.x - 20) {
+    lives--;
+    shakeTimer = 18;
+    playHitSfx();
+    // splash
+    for (let i = 0; i < 20; i++) {
+      splashParticles.push({
+        x: gugu.x + gugu.w / 2,
+        y: gugu.y + gugu.h,
+        vx: (Math.random() - 0.5) * 8,
+        vy: -Math.random() * 10 - 2,
+        life: 40 + Math.random() * 30,
+        r: 3 + Math.random() * 4
+      });
+    }
+    if (lives <= 0) {
+      state = STATE.DROWNING;
+      drownTimer = 0;
+      drownBubbles = [];
+      drownSharks = [];
+      if (score > highScore) { highScore = score; localStorage.setItem('gugu_hi', highScore); }
+      return;
+    }
+    // Push wave back and give invincibility
+    wave.x = -300;
+    invincibleTimer = 90;
+  }
+
+  // Obstacles
+  obstacleTimer--;
+  if (obstacleTimer <= 0) {
+    const types = Object.values(OBS_TYPES);
+    const t = types[Math.floor(Math.random() * types.length)];
+    const isFlying = t.label === 'gaivota' && Math.random() > 0.4;
+    const isHole = t.label === 'buraco';
+    obstacles.push({
+      x: canvas.width + 20,
+      y: isFlying ? PIER_TOP() - 70 - Math.random() * 30 : isHole ? PIER_TOP() - 6 : PIER_TOP() - t.h,
+      ...t, flying: isFlying
+    });
+    obstacleTimer = Math.max(100, 200 - difficulty * 8) + Math.random() * 120;
+  }
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    obstacles[i].x -= lvlConf.obstSpeed * difficulty;
+    if (obstacles[i].x < -50) { obstacles.splice(i, 1); continue; }
+    // collision
+    const o = obstacles[i];
+    const isHoleObs = o.label === 'buraco';
+    const collides = isHoleObs
+      ? (invincibleTimer <= 0 && gugu.grounded &&
+         gugu.x + gugu.w - 6 > o.x + 4 && gugu.x + 6 < o.x + o.w - 4)
+      : (invincibleTimer <= 0 &&
+         gugu.x + gugu.w - 6 > o.x + 4 && gugu.x + 6 < o.x + o.w - 4 &&
+         gugu.y + gugu.h - 4 > o.y + 4 && gugu.y + 4 < o.y + o.h - 4);
+    if (collides) {
+      lives--;
+      shakeTimer = 14;
+      invincibleTimer = 90;
+      playHitSfx();
+      obstacles.splice(i, 1);
+      if (lives <= 0) {
+        state = STATE.DROWNING;
+        drownTimer = 0;
+        drownBubbles = [];
+        drownSharks = [];
+        if (score > highScore) { highScore = score; localStorage.setItem('gugu_hi', highScore); }
+        return;
+      }
+      continue;
+    }
+  }
+
+  // Sardines
+  sardineTimer--;
+  if (sardineTimer <= 0) {
+    sardines.push({
+      x: canvas.width + 20,
+      y: PIER_TOP() - 50 - Math.random() * 50,
+      w: 18, h: 10, collected: false
+    });
+    sardineTimer = 100 + Math.random() * 120;
+  }
+  for (let i = sardines.length - 1; i >= 0; i--) {
+    sardines[i].x -= 1.2 * difficulty;
+    if (sardines[i].x < -30) { sardines.splice(i, 1); continue; }
+    const s = sardines[i];
+    if (!s.collected && gugu.x + gugu.w > s.x && gugu.x < s.x + s.w &&
+        gugu.y + gugu.h > s.y && gugu.y < s.y + s.h) {
+      s.collected = true;
+      sardinesCollected++;
+      score += 15;
+    }
+  }
+
+  // Beer bottles (collectibles)
+  bottleTimer--;
+  if (bottleTimer <= 0) {
+    bottles.push({
+      x: canvas.width + 20,
+      y: PIER_TOP() - 40 - Math.random() * 60,
+      w: 16, h: 30, collected: false
+    });
+    bottleTimer = 140 + Math.random() * 160;
+  }
+  for (let i = bottles.length - 1; i >= 0; i--) {
+    bottles[i].x -= 1.2 * difficulty;
+    if (bottles[i].x < -30) { bottles.splice(i, 1); continue; }
+    const b = bottles[i];
+    if (!b.collected && gugu.x + gugu.w > b.x && gugu.x < b.x + b.w &&
+        gugu.y + gugu.h > b.y && gugu.y < b.y + b.h) {
+      b.collected = true;
+      bottlesCollected++;
+      score += 40;
+      playSambaSfx();
+    }
+  }
+}
+
+// ── Draw Helpers ──
+function drawSky() {
+  // Night sky
+  const grad = ctx.createLinearGradient(0, 0, 0, PIER_TOP());
+  grad.addColorStop(0, '#05080f');
+  grad.addColorStop(0.4, '#0a1525');
+  grad.addColorStop(0.8, '#101d35');
+  grad.addColorStop(1, '#182848');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, PIER_TOP());
+
+  // Stars
+  const starSeed = [0.12,0.34,0.56,0.78,0.91,0.23,0.45,0.67,0.89,0.01,0.15,0.38,0.52,0.74,0.96,0.18,0.42,0.63,0.85,0.07,0.29,0.51,0.73,0.95,0.11,0.33,0.55,0.77,0.99,0.21];
+  for (let i = 0; i < 30; i++) {
+    const sx = starSeed[i] * canvas.width;
+    const sy = starSeed[(i + 7) % 30] * PIER_TOP() * 0.7;
+    const twinkle = 0.4 + Math.sin(frameCount * 0.03 + i * 2) * 0.4;
+    ctx.fillStyle = `rgba(255,255,240,${twinkle})`;
+    ctx.beginPath(); ctx.arc(sx, sy, 1 + starSeed[(i+3)%30] * 1.2, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Moon
+  const moonX = canvas.width * 0.8;
+  const moonY = PIER_TOP() * 0.22;
+  const mg = ctx.createRadialGradient(moonX, moonY, 5, moonX, moonY, 50);
+  mg.addColorStop(0, 'rgba(240,240,220,1)');
+  mg.addColorStop(0.4, 'rgba(220,220,200,0.5)');
+  mg.addColorStop(1, 'rgba(200,200,180,0)');
+  ctx.fillStyle = mg;
+  ctx.beginPath(); ctx.arc(moonX, moonY, 50, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f0f0dc';
+  ctx.beginPath(); ctx.arc(moonX, moonY, 16, 0, Math.PI * 2); ctx.fill();
+  // Moon craters
+  ctx.fillStyle = 'rgba(200,200,180,0.4)';
+  ctx.beginPath(); ctx.arc(moonX - 5, moonY - 3, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(moonX + 6, moonY + 4, 2, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawOcean() {
+  const top = PIER_TOP();
+  const grad = ctx.createLinearGradient(0, top, 0, canvas.height);
+  grad.addColorStop(0, '#0a2040');
+  grad.addColorStop(1, '#050e1a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, top, canvas.width, canvas.height - top);
+
+  // Moonlight reflection
+  const moonX = canvas.width * 0.8;
+  ctx.fillStyle = 'rgba(200,220,255,0.04)';
+  for (let i = 0; i < 8; i++) {
+    const rw = 20 - i * 2;
+    const ry = top + 10 + i * 14 + Math.sin(frameCount * 0.03 + i) * 3;
+    ctx.beginPath();
+    ctx.ellipse(moonX + Math.sin(frameCount * 0.02 + i) * 5, ry, rw, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Small waves
+  ctx.strokeStyle = 'rgba(100,160,220,0.1)';
+  ctx.lineWidth = 2;
+  for (let row = 0; row < 5; row++) {
+    ctx.beginPath();
+    const wy = top + 20 + row * 18;
+    for (let x = 0; x < canvas.width; x += 4) {
+      const off = Math.sin((x + frameCount * 1.5 + row * 40) * 0.03) * 4;
+      if (x === 0) ctx.moveTo(x, wy + off);
+      else ctx.lineTo(x, wy + off);
+    }
+    ctx.stroke();
+  }
+}
+
+function drawPier() {
+  const top = PIER_TOP();
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(0, top + 4, canvas.width, 30);
+  // Main deck
+  ctx.fillStyle = PIER_COLOR;
+  ctx.fillRect(0, top - 6, canvas.width, 30);
+  // Planks
+  ctx.strokeStyle = PIER_DARK;
+  ctx.lineWidth = 1;
+  for (let x = 0; x < canvas.width; x += 36) {
+    ctx.beginPath(); ctx.moveTo(x, top - 6); ctx.lineTo(x, top + 24); ctx.stroke();
+  }
+  // Rails
+  ctx.fillStyle = '#666';
+  for (let x = 30; x < canvas.width; x += 80) {
+    ctx.fillRect(x, top - 6 - PIER_RAIL_H, 4, PIER_RAIL_H);
+  }
+  ctx.fillStyle = '#888';
+  ctx.fillRect(0, top - 6 - PIER_RAIL_H, canvas.width, 3);
+  // Pier lamp posts (nighttime)
+  ctx.fillStyle = '#555';
+  for (let x = 100; x < canvas.width; x += 200) {
+    ctx.fillRect(x, top - 6 - 50, 3, 50);
+    // Lamp glow
+    const lg = ctx.createRadialGradient(x + 1, top - 58, 2, x + 1, top - 58, 35);
+    lg.addColorStop(0, 'rgba(255,220,130,0.35)');
+    lg.addColorStop(1, 'rgba(255,200,100,0)');
+    ctx.fillStyle = lg;
+    ctx.beginPath(); ctx.arc(x + 1, top - 58, 35, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffd070';
+    ctx.beginPath(); ctx.arc(x + 1, top - 58, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#555';
+  }
+
+  // Estoril sign
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.font = 'bold 12px monospace';
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.lineWidth = 3;
+  ctx.strokeText('PONTÃO DO TAMARIZ — ESTORIL', canvas.width - 270, top + 16);
+  ctx.fillText('PONTÃO DO TAMARIZ — ESTORIL', canvas.width - 270, top + 16);
+}
+
+function drawGugu() {
+  // Blink when invincible
+  if (invincibleTimer > 0 && Math.floor(frameCount / 4) % 2 === 0) return;
+
+  const { x, y, w, h, frame, grounded } = gugu;
+  const legOffset = grounded ? [0, 4, 0, -4][frame] : -2;
+  const armOffset = grounded ? [3, -1, -3, 1][frame] : -4;
+
+  // Drunk wobble
+  ctx.save();
+  const wobble = Math.sin(frameCount * 0.08) * 0.06;
+  ctx.translate(x + w / 2, y + h);
+  ctx.rotate(wobble);
+  ctx.translate(-(x + w / 2), -(y + h));
+
+  // Shadow
+  if (grounded) {
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, PIER_TOP() - 2, 14, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Body (t-shirt)
+  ctx.fillStyle = '#e63946';
+  ctx.fillRect(x + 6, y + 16, w - 12, 18);
+
+  // Shorts
+  ctx.fillStyle = '#264653';
+  ctx.fillRect(x + 6, y + 34, w - 12, 8);
+
+  // Legs
+  ctx.fillStyle = '#d4a373';
+  ctx.fillRect(x + 8, y + 42, 5, 6 + legOffset);
+  ctx.fillRect(x + w - 13, y + 42, 5, 6 - legOffset);
+
+  // Shoes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + 7, y + 46 + Math.max(0, legOffset), 7, 3);
+  ctx.fillRect(x + w - 14, y + 46 + Math.max(0, -legOffset), 7, 3);
+
+  // Arms
+  ctx.fillStyle = '#d4a373';
+  ctx.save();
+  // Left arm
+  ctx.translate(x + 4, y + 18);
+  ctx.rotate((armOffset) * 0.06);
+  ctx.fillRect(-2, 0, 4, 14);
+  ctx.restore();
+  ctx.save();
+  // Right arm
+  ctx.translate(x + w - 4, y + 18);
+  ctx.rotate((-armOffset) * 0.06);
+  ctx.fillRect(-2, 0, 4, 14);
+  ctx.restore();
+
+  // Head
+  ctx.fillStyle = '#d4a373';
+  ctx.beginPath();
+  ctx.arc(x + w / 2, y + 10, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Hair
+  ctx.fillStyle = '#3d2b1f';
+  ctx.beginPath();
+  ctx.arc(x + w / 2, y + 7, 10, Math.PI, Math.PI * 2);
+  ctx.fill();
+
+  // Eyes (looking back scared!)
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x + w / 2 - 4, y + 10, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + w / 2 + 4, y + 10, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(x + w / 2 - 5.5, y + 10, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + w / 2 + 2.5, y + 10, 1.5, 0, Math.PI * 2); ctx.fill();
+
+  // Mouth (scared)
+  ctx.fillStyle = '#c1121f';
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + 16, 3, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Name tag
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = 'bold 9px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('GUGU', x + w / 2, y - 4);
+  ctx.textAlign = 'left';
+
+  ctx.restore(); // end drunk wobble
+}
+
+function drawWave() {
+  const top = PIER_TOP();
+  const front = wave.x; // front edge of the wave
+  const h = canvas.height;
+  const t = frameCount * 0.04;
+
+  // Water body behind the wave (fills left side)
+  ctx.save();
+  const waterGrad = ctx.createLinearGradient(0, top - 40, 0, h);
+  waterGrad.addColorStop(0, '#1a88c4');
+  waterGrad.addColorStop(0.5, '#0d5d8a');
+  waterGrad.addColorStop(1, '#0a3d5c');
+  ctx.fillStyle = waterGrad;
+  ctx.fillRect(-10, top - 30, front + 10, h - top + 40);
+
+  // Surface ripple on the water body
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1.5;
+  for (let row = 0; row < 3; row++) {
+    ctx.beginPath();
+    const ry = top - 10 + row * 16;
+    for (let x = 0; x < front; x += 5) {
+      const off = Math.sin((x + t * 30 + row * 50) * 0.04) * 3;
+      if (x === 0) ctx.moveTo(x, ry + off); else ctx.lineTo(x, ry + off);
+    }
+    ctx.stroke();
+  }
+
+  // The big curling wave front
+  const waveHeight = 100;
+  const curlWidth = 80;
+
+  ctx.beginPath();
+  // Start from bottom of front
+  ctx.moveTo(front, h);
+  // Go up the front face
+  ctx.lineTo(front, top - 20);
+  // Curve up into the crest
+  ctx.quadraticCurveTo(
+    front + curlWidth * 0.3, top - waveHeight - 10 + Math.sin(t * 1.5) * 8,
+    front - curlWidth * 0.1, top - waveHeight + Math.sin(t * 1.2) * 6
+  );
+  // Curl over (the lip)
+  ctx.quadraticCurveTo(
+    front - curlWidth * 0.5, top - waveHeight + 15 + Math.sin(t * 1.8) * 5,
+    front - curlWidth * 0.8, top - 30
+  );
+  // Back down into the body
+  ctx.lineTo(front - curlWidth, top - 10);
+  ctx.lineTo(-10, top - 10);
+  ctx.lineTo(-10, h);
+  ctx.closePath();
+
+  const wg = ctx.createLinearGradient(front - curlWidth, top - waveHeight, front, h);
+  wg.addColorStop(0, '#4fc3f7');
+  wg.addColorStop(0.25, '#29b6f6');
+  wg.addColorStop(0.5, '#1a88c4');
+  wg.addColorStop(0.8, '#0d5d8a');
+  wg.addColorStop(1, '#0a3d5c');
+  ctx.fillStyle = wg;
+  ctx.fill();
+
+  // Foam/white crest on top of wave
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(front, top - 22);
+  ctx.quadraticCurveTo(
+    front + curlWidth * 0.3, top - waveHeight - 12 + Math.sin(t * 1.5) * 8,
+    front - curlWidth * 0.1, top - waveHeight - 2 + Math.sin(t * 1.2) * 6
+  );
+  ctx.quadraticCurveTo(
+    front - curlWidth * 0.5, top - waveHeight + 13 + Math.sin(t * 1.8) * 5,
+    front - curlWidth * 0.8, top - 32
+  );
+  ctx.stroke();
+
+  // Inner foam lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(front - 5, top - 10);
+  ctx.quadraticCurveTo(
+    front + curlWidth * 0.15, top - waveHeight + 20,
+    front - curlWidth * 0.4, top - 25
+  );
+  ctx.stroke();
+
+  // Spray particles at the crest
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  for (let i = 0; i < 10; i++) {
+    const px = front - curlWidth * 0.1 + Math.sin(t * 2.5 + i * 1.3) * 20;
+    const py = top - waveHeight - 5 + Math.cos(t * 2 + i * 0.9) * 15 + i * 2;
+    const radius = 1.5 + Math.sin(t + i) * 1;
+    ctx.beginPath(); ctx.arc(px, py, radius, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Foam bubbles at the base of the wave front
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  for (let i = 0; i < 6; i++) {
+    const bx = front - 10 - i * 12 + Math.sin(t + i * 2) * 5;
+    const by = top - 5 + Math.sin(t * 1.5 + i) * 4;
+    ctx.beginPath(); ctx.arc(bx, by, 3 + Math.sin(t + i) * 1.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawObstacles() {
+  for (const o of obstacles) {
+    if (o.label === 'gaivota') {
+      // Seagull
+      ctx.fillStyle = '#fff';
+      ctx.save();
+      ctx.translate(o.x + o.w / 2, o.y + o.h / 2);
+      // Body
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 14, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Wings
+      const wingAngle = Math.sin(frameCount * 0.15) * 0.4;
+      ctx.strokeStyle = '#ccc';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-5, -2);
+      ctx.quadraticCurveTo(-18, -15 - wingAngle * 20, -22, -5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(5, -2);
+      ctx.quadraticCurveTo(18, -15 - wingAngle * 20, 22, -5);
+      ctx.stroke();
+      // Beak
+      ctx.fillStyle = '#f4a828';
+      ctx.beginPath(); ctx.moveTo(14, -1); ctx.lineTo(20, 1); ctx.lineTo(14, 3); ctx.fill();
+      // Eye
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.arc(10, -2, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else if (o.label === 'buraco') {
+      // Hole in the pier
+      ctx.fillStyle = '#0a0a15';
+      ctx.beginPath();
+      ctx.ellipse(o.x + o.w / 2, o.y + o.h / 2, o.w / 2, o.h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Dark edge
+      ctx.strokeStyle = '#3a2a1a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(o.x + o.w / 2, o.y + o.h / 2, o.w / 2, o.h / 2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // Broken wood edges
+      ctx.strokeStyle = '#6B5740';
+      ctx.lineWidth = 1.5;
+      for (let j = 0; j < 6; j++) {
+        const angle = (j / 6) * Math.PI * 2;
+        const rx = o.x + o.w / 2 + Math.cos(angle) * (o.w / 2 - 1);
+        const ry = o.y + o.h / 2 + Math.sin(angle) * (o.h / 2 - 1);
+        ctx.beginPath();
+        ctx.moveTo(rx, ry);
+        ctx.lineTo(rx + Math.cos(angle) * 4, ry + Math.sin(angle) * 3);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function drawSardines() {
+  for (const s of sardines) {
+    if (s.collected) continue;
+    ctx.save();
+    ctx.translate(s.x + s.w / 2, s.y + s.h / 2 + Math.sin(frameCount * 0.08 + s.x) * 3);
+    // Fish body
+    ctx.fillStyle = '#c0c0c0';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 9, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Tail
+    ctx.fillStyle = '#a0a0a0';
+    ctx.beginPath();
+    ctx.moveTo(-9, 0); ctx.lineTo(-15, -5); ctx.lineTo(-15, 5); ctx.closePath();
+    ctx.fill();
+    // Eye
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(4, -1, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Sparkle
+    ctx.fillStyle = `rgba(255,255,100,${0.4 + Math.sin(frameCount * 0.1) * 0.3})`;
+    ctx.beginPath(); ctx.arc(0, -7, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawBottles() {
+  for (const b of bottles) {
+    if (b.collected) continue;
+    ctx.save();
+    const bx = b.x;
+    const by = b.y + Math.sin(frameCount * 0.06 + b.x * 0.1) * 4;
+    // Glow
+    ctx.fillStyle = `rgba(255,200,50,${0.15 + Math.sin(frameCount * 0.08) * 0.1})`;
+    ctx.beginPath(); ctx.arc(bx + 8, by + 15, 16, 0, Math.PI * 2); ctx.fill();
+    // Bottle body
+    ctx.fillStyle = '#2d5a27';
+    ctx.beginPath();
+    ctx.roundRect(bx + 3, by + 10, 10, 18, 3);
+    ctx.fill();
+    // Neck
+    ctx.fillRect(bx + 5, by + 2, 6, 10);
+    // Cap
+    ctx.fillStyle = '#c0a030';
+    ctx.fillRect(bx + 5, by, 6, 3);
+    // Label
+    ctx.fillStyle = '#f5e6c8';
+    ctx.fillRect(bx + 4, by + 14, 8, 8);
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(bx + 4, by + 10, 3, 16);
+    // Beer text
+    ctx.fillStyle = '#5a3a10';
+    ctx.font = 'bold 5px sans-serif';
+    ctx.fillText('SB', bx + 5, by + 21);
+    // Points indicator
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('+40', bx + 8, by - 4);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+}
+
+function drawSplash() {
+  for (let i = splashParticles.length - 1; i >= 0; i--) {
+    const p = splashParticles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.3;
+    p.life--;
+    if (p.life <= 0) { splashParticles.splice(i, 1); continue; }
+    ctx.globalAlpha = p.life / 60;
+    ctx.fillStyle = '#7ec8e3';
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  const lvlConf = LEVELS[level - 1];
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(10, 10, 260, 82);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillText(`Nível ${level}/3`, 20, 28);
+  ctx.font = '12px sans-serif';
+  ctx.fillStyle = '#ffd54f';
+  // Progress bar
+  const barW = 100, barH = 8, barX = 80, barY = 20;
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fillRect(barX, barY, barW, barH);
+  ctx.fillStyle = '#4fc3f7';
+  ctx.fillRect(barX, barY, Math.min(1, score / lvlConf.goal) * barW, barH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.strokeRect(barX, barY, barW, barH);
+  ctx.fillStyle = '#aaa';
+  ctx.fillText(`${score}/${lvlConf.goal}pts`, barX + barW + 8, 28);
+  // Lives
+  ctx.font = '13px sans-serif';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(`❤️`.repeat(lives) + `🖤`.repeat(Math.max(0, 3 - lives)), 20, 50);
+  ctx.font = '12px sans-serif';
+  ctx.fillText(`🐟 ${sardinesCollected}  🍺 ${bottlesCollected}  🏆 ${highScore}pts`, 20, 68);
+  // Level name
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '10px sans-serif';
+  ctx.fillText(lvlConf.name, 20, 82);
+
+  // Top 5 scoreboard (always visible, top right)
+  const sbX = canvas.width - 140, sbY = 45;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  const sbH = 16 + Math.min(5, Math.max(1, leaderboard.length)) * 14;
+  ctx.fillRect(sbX, sbY, 130, sbH);
+  ctx.strokeStyle = 'rgba(255,215,0,0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sbX, sbY, 130, sbH);
+  ctx.fillStyle = '#ffd54f';
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillText('🏆 TOP 5', sbX + 8, sbY + 13);
+  ctx.font = '10px monospace';
+  if (leaderboard.length === 0) {
+    ctx.fillStyle = '#666';
+    ctx.fillText('---', sbX + 8, sbY + 28);
+  } else {
+    for (let i = 0; i < Math.min(5, leaderboard.length); i++) {
+      const e = leaderboard[i];
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+      ctx.fillStyle = i < 3 ? '#ffd54f' : '#aaa';
+      ctx.fillText(`${medal} ${e.name.substring(0,8)} ${e.score}`, sbX + 5, sbY + 28 + i * 14);
+    }
+  }
+}
+
+function drawMenu() {
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.fillText('🌊 Gugu Foge da Onda!', canvas.width / 2, canvas.height / 2 - 80);
+  ctx.font = '18px sans-serif';
+  ctx.fillStyle = '#e8d5b7';
+  ctx.fillText('Pontão do Tamariz — Estoril', canvas.width / 2, canvas.height / 2 - 50);
+  ctx.fillStyle = '#aee';
+  ctx.font = '14px sans-serif';
+  ctx.fillText('Espaço / Clique para saltar (2x no ar!)', canvas.width / 2, canvas.height / 2 - 20);
+  ctx.fillText('3 Níveis — tu e os amigos bêbados, foge da onda! 🍺', canvas.width / 2, canvas.height / 2 + 0);
+  ctx.fillStyle = '#ffca28';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillText('▶ Clica para jogar!', canvas.width / 2, canvas.height / 2 + 40);
+  if (highScore > 0) {
+    ctx.fillStyle = '#aaa';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(`Recorde: ${highScore}pts`, canvas.width / 2, canvas.height / 2 + 62);
+  }
+  // Leaderboard
+  drawLeaderboard();
+  ctx.textAlign = 'left';
+}
+
+function drawGameOver() {
+  ctx.fillStyle = 'rgba(0,0,30,0.75)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 30px sans-serif';
+  ctx.fillText('💦 O Gugu afogou-se!', canvas.width / 2, canvas.height / 2 - 70);
+  ctx.font = '18px sans-serif';
+  ctx.fillStyle = '#ffd54f';
+  ctx.fillText(`${playerName}  |  Nível ${level}  |  ${score}pts  |  🐟${sardinesCollected} 🍺${bottlesCollected}`, canvas.width / 2, canvas.height / 2 - 40);
+  if (score >= highScore && score > 0) {
+    ctx.fillStyle = '#4fc3f7';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.fillText('🎉 Novo Recorde!', canvas.width / 2, canvas.height / 2 - 15);
+  }
+  ctx.fillStyle = '#aee';
+  ctx.font = '14px sans-serif';
+  ctx.fillText('Clica para tentar outra vez', canvas.width / 2, canvas.height / 2 + 10);
+  // Mini leaderboard
+  drawLeaderboard();
+  ctx.textAlign = 'left';
+}
+
+function drawLevelUp() {
+  ctx.fillStyle = 'rgba(0,0,40,0.55)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 34px sans-serif';
+  ctx.fillText(`✅ Nível ${level} Completo!`, canvas.width / 2, canvas.height / 2 - 30);
+  ctx.font = '20px sans-serif';
+  ctx.fillStyle = '#ffd54f';
+  ctx.fillText(LEVELS[level].name, canvas.width / 2, canvas.height / 2 + 15);
+  ctx.fillStyle = '#aee';
+  ctx.font = '15px sans-serif';
+  ctx.fillText('Prepara-te...', canvas.width / 2, canvas.height / 2 + 50);
+  ctx.textAlign = 'left';
+}
+
+function drawAmbulance(ax, ay) {
+  // Body
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(ax, ay, 80, 40);
+  // Cabin
+  ctx.fillStyle = '#e0e0e0';
+  ctx.fillRect(ax + 60, ay + 8, 25, 32);
+  // Windshield
+  ctx.fillStyle = '#8ad';
+  ctx.fillRect(ax + 68, ay + 10, 15, 16);
+  // Red stripe
+  ctx.fillStyle = '#e63946';
+  ctx.fillRect(ax + 2, ay + 15, 56, 6);
+  // Cross
+  ctx.fillStyle = '#e63946';
+  ctx.fillRect(ax + 20, ay + 5, 12, 3);
+  ctx.fillRect(ax + 24, ay + 2, 4, 10);
+  // Wheels
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.arc(ax + 18, ay + 42, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ax + 65, ay + 42, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#888';
+  ctx.beginPath(); ctx.arc(ax + 18, ay + 42, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ax + 65, ay + 42, 3, 0, Math.PI * 2); ctx.fill();
+  // Siren light (flashing)
+  const flash = Math.floor(frameCount / 8) % 2 === 0;
+  ctx.fillStyle = flash ? '#ff0000' : '#0066ff';
+  ctx.beginPath(); ctx.arc(ax + 40, ay - 4, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = flash ? 'rgba(255,0,0,0.15)' : 'rgba(0,100,255,0.15)';
+  ctx.beginPath(); ctx.arc(ax + 40, ay - 4, 18, 0, Math.PI * 2); ctx.fill();
+  // INEM text
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 9px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('INEM', ax + 40, ay + 34);
+  ctx.textAlign = 'left';
+}
+
+function drawFireTruck(fx, fy) {
+  // Body
+  ctx.fillStyle = '#cc2200';
+  ctx.fillRect(fx, fy, 90, 38);
+  // Cabin
+  ctx.fillStyle = '#aa1a00';
+  ctx.fillRect(fx + 68, fy + 5, 28, 33);
+  // Windshield
+  ctx.fillStyle = '#8ad';
+  ctx.fillRect(fx + 76, fy + 7, 18, 15);
+  // Yellow stripe
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(fx + 2, fy + 28, 64, 4);
+  // Ladder on top
+  ctx.fillStyle = '#888';
+  ctx.fillRect(fx + 8, fy - 4, 55, 3);
+  ctx.fillRect(fx + 8, fy - 1, 55, 2);
+  for (let lx = fx + 12; lx < fx + 60; lx += 10) {
+    ctx.fillRect(lx, fy - 4, 2, 5);
+  }
+  // Roller door
+  ctx.fillStyle = '#881800';
+  ctx.fillRect(fx + 5, fy + 10, 22, 18);
+  ctx.strokeStyle = '#660';
+  ctx.lineWidth = 0.5;
+  for (let ly = fy + 13; ly < fy + 28; ly += 3) {
+    ctx.beginPath(); ctx.moveTo(fx + 5, ly); ctx.lineTo(fx + 27, ly); ctx.stroke();
+  }
+  // Wheels
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.arc(fx + 20, fy + 40, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(fx + 72, fy + 40, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#888';
+  ctx.beginPath(); ctx.arc(fx + 20, fy + 40, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(fx + 72, fy + 40, 3, 0, Math.PI * 2); ctx.fill();
+  // Siren (flashing)
+  const flash2 = Math.floor(frameCount / 6) % 2 === 0;
+  ctx.fillStyle = flash2 ? '#ff4400' : '#ffaa00';
+  ctx.beginPath(); ctx.arc(fx + 82, fy - 2, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = flash2 ? 'rgba(255,68,0,0.12)' : 'rgba(255,170,0,0.12)';
+  ctx.beginPath(); ctx.arc(fx + 82, fy - 2, 16, 0, Math.PI * 2); ctx.fill();
+  // BOMBEIROS text
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 7px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('BOMBEIROS', fx + 45, fy + 24);
+  ctx.textAlign = 'left';
+}
+
+function drawPartyFriend(px, py, fi) {
+  const f = FRIENDS[fi];
+  const t = frameCount * 0.06 + fi * 2.5;
+  
+  // Dance moves cycle
+  const dancePhase = Math.floor((frameCount + fi * 40) / 20) % 4;
+  const bounce = Math.abs(Math.sin(t * 1.5)) * 15;
+  const hipSwing = Math.sin(t * 2) * 8;
+  const bodyTilt = Math.sin(t * 1.3) * 0.2;
+  
+  ctx.save();
+  ctx.translate(px + 10 + hipSwing, py + 40);
+  ctx.rotate(bodyTilt);
+  ctx.translate(-(px + 10 + hipSwing), -(py + 40));
+  
+  const bx = px + hipSwing;
+  const by = py - bounce;
+  
+  // Legs (dancing!)
+  const leftLegAng = Math.sin(t * 2.5) * 0.5;
+  const rightLegAng = Math.sin(t * 2.5 + Math.PI) * 0.5;
+  ctx.fillStyle = '#264653';
+  ctx.save();
+  ctx.translate(bx + 6, by + 30);
+  ctx.rotate(leftLegAng);
+  ctx.fillRect(-2, 0, 5, 12);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(bx + 14, by + 30);
+  ctx.rotate(rightLegAng);
+  ctx.fillRect(-3, 0, 5, 12);
+  ctx.restore();
+  
+  // Shoes
+  ctx.fillStyle = '#fff';
+  const lFootX = bx + 6 + Math.sin(leftLegAng) * 10;
+  const lFootY = by + 42 + Math.cos(leftLegAng) * 2;
+  const rFootX = bx + 14 + Math.sin(rightLegAng) * 10;
+  const rFootY = by + 42 + Math.cos(rightLegAng) * 2;
+  ctx.fillRect(lFootX - 3, lFootY, 7, 3);
+  ctx.fillRect(rFootX - 3, rFootY, 7, 3);
+  
+  // Body
+  ctx.fillStyle = f.color;
+  ctx.fillRect(bx + 3, by + 14, 14, 16);
+  
+  // Head (bobbing)
+  const headBob = Math.sin(t * 3) * 3;
+  ctx.fillStyle = '#d4a373';
+  ctx.beginPath(); ctx.arc(bx + 10, by + 8 + headBob, 8, 0, Math.PI * 2); ctx.fill();
+  // Hair
+  ctx.fillStyle = f.hair;
+  ctx.beginPath(); ctx.arc(bx + 10, by + 5 + headBob, 8, Math.PI, Math.PI * 2); ctx.fill();
+  // Eyes (happy squint)
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(bx + 7, by + 7 + headBob, 2, 0.1, Math.PI - 0.1); ctx.stroke();
+  ctx.beginPath(); ctx.arc(bx + 13, by + 7 + headBob, 2, 0.1, Math.PI - 0.1); ctx.stroke();
+  // Big open mouth (singing/shouting)
+  ctx.fillStyle = '#c1121f';
+  const mouthOpen = 2 + Math.abs(Math.sin(t * 4)) * 3;
+  ctx.beginPath(); ctx.ellipse(bx + 10, by + 14 + headBob, 4, mouthOpen, 0, 0, Math.PI * 2); ctx.fill();
+  
+  // Arms — different dance moves per phase
+  ctx.fillStyle = '#d4a373';
+  if (dancePhase === 0) {
+    // Arms up disco
+    const la = -1.5 + Math.sin(t * 3) * 0.6;
+    const ra = 1.5 - Math.sin(t * 3) * 0.6;
+    ctx.save(); ctx.translate(bx + 17, by + 16); ctx.rotate(la); ctx.fillRect(0, -2, 3, 14); ctx.restore();
+    ctx.save(); ctx.translate(bx + 3, by + 16); ctx.rotate(ra); ctx.fillRect(-3, -2, 3, 14); ctx.restore();
+  } else if (dancePhase === 1) {
+    // Point left/right
+    const point = Math.sin(t * 2) * 1.2;
+    ctx.save(); ctx.translate(bx + 17, by + 18); ctx.rotate(-0.5 + point); ctx.fillRect(0, -2, 3, 14); ctx.restore();
+    ctx.save(); ctx.translate(bx + 3, by + 18); ctx.rotate(0.5 + point); ctx.fillRect(-3, -2, 3, 14); ctx.restore();
+  } else if (dancePhase === 2) {
+    // Wave hands side to side
+    const wave = Math.sin(t * 4) * 0.8;
+    ctx.save(); ctx.translate(bx + 17, by + 16); ctx.rotate(-1.0 + wave); ctx.fillRect(0, -2, 3, 14); ctx.restore();
+    ctx.save(); ctx.translate(bx + 3, by + 16); ctx.rotate(1.0 + wave); ctx.fillRect(-3, -2, 3, 14); ctx.restore();
+  } else {
+    // Chicken dance
+    const flap = Math.sin(t * 5) * 0.6;
+    ctx.save(); ctx.translate(bx + 17, by + 18); ctx.rotate(-0.3 + flap); ctx.fillRect(0, -2, 3, 10); ctx.restore();
+    ctx.save(); ctx.translate(bx + 3, by + 18); ctx.rotate(0.3 - flap); ctx.fillRect(-3, -2, 3, 10); ctx.restore();
+  }
+  
+  if (fi === 0) {
+    // Miguel filming with phone during party
+    const phoneSwing = Math.sin(t * 1.5) * 0.1;
+    ctx.save();
+    ctx.translate(bx + 20, by + 4);
+    ctx.rotate(-0.3 + phoneSwing);
+    // Phone
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-4, -10, 10, 16);
+    ctx.fillStyle = '#4af';
+    ctx.fillRect(-3, -8, 8, 12);
+    // Camera lens
+    ctx.fillStyle = '#333';
+    ctx.beginPath(); ctx.arc(2, -9, 2, 0, Math.PI * 2); ctx.fill();
+    // Flash
+    const flashOn = Math.floor(frameCount / 12) % 3 === 0;
+    if (flashOn) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(-2, -9, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,220,0.2)';
+      ctx.beginPath(); ctx.arc(-2, -9, 12, 0, Math.PI * 2); ctx.fill();
+    }
+    // REC
+    const recB = Math.floor(frameCount / 18) % 2 === 0;
+    if (recB) { ctx.fillStyle = '#f44'; ctx.beginPath(); ctx.arc(-2, -6, 1.5, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#f44'; ctx.font = 'bold 4px sans-serif'; ctx.fillText('REC', -3, 2);
+    ctx.restore();
+  } else {
+    // Beer in hand (sloshing)
+    const beerSwing = Math.sin(t * 2 + fi) * 3;
+    ctx.fillStyle = '#daa520';
+    ctx.fillRect(bx + 20, by + 2 + beerSwing, 5, 8);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(bx + 20, by + beerSwing, 5, 3);
+    // Beer splash drops
+    if (Math.abs(beerSwing) > 2) {
+      ctx.fillStyle = '#daa520';
+      ctx.beginPath(); ctx.arc(bx + 22 + Math.sin(t * 5) * 3, by - 2 + beerSwing, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  
+  // Name
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 8px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(f.name, bx + 10, by - 6);
+  ctx.textAlign = 'left';
+  
+  ctx.restore();
+}
+
+let fireworks = [];
+
+function spawnFirework() {
+  const x = Math.random() * canvas.width;
+  const y = 30 + Math.random() * canvas.height * 0.4;
+  const color = ['#ff0','#f44','#4fc3f7','#4caf50','#ff9800','#e91e63','#fff','#ffd700'][Math.floor(Math.random()*8)];
+  const particles = [];
+  for (let i = 0; i < 25; i++) {
+    const angle = (i / 25) * Math.PI * 2 + Math.random() * 0.3;
+    const speed = 1.5 + Math.random() * 2.5;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 40 + Math.random() * 30,
+      maxLife: 40 + Math.random() * 30,
+      r: 2 + Math.random() * 2,
+      color
+    });
+  }
+  fireworks.push(...particles);
+}
+
+function drawFireworks() {
+  // Spawn new fireworks periodically
+  if (frameCount % 18 === 0) spawnFirework();
+  if (frameCount % 25 === 0) spawnFirework();
+  
+  for (let i = fireworks.length - 1; i >= 0; i--) {
+    const p = fireworks[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.04; // gravity
+    p.vx *= 0.98;
+    p.life--;
+    if (p.life <= 0) { fireworks.splice(i, 1); continue; }
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * alpha, 0, Math.PI * 2);
+    ctx.fill();
+    // Trail
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath();
+    ctx.arc(p.x - p.vx, p.y - p.vy, p.r * 0.5 * alpha, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  
+  // Also some confetti
+  const colors = ['#ff0', '#f44', '#4fc3f7', '#4caf50', '#ff9800', '#e91e63', '#fff'];
+  for (let i = 0; i < 20; i++) {
+    const cx = (Math.sin(i * 7.3 + frameCount * 0.02) * 0.5 + 0.5) * canvas.width;
+    const cy = ((frameCount * 0.4 + i * 37) % (canvas.height + 20)) - 10;
+    const size = 3 + Math.sin(i * 2.1) * 2;
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(frameCount * 0.03 + i);
+    ctx.fillRect(-size / 2, -1, size, 3);
+    ctx.restore();
+  }
+}
+
+function drawWinScreen() {
+  const top = PIER_TOP();
+  // Draw fire truck and ambulance on pier
+  drawFireTruck(ambulanceX - 110, top - 46);
+  drawAmbulance(ambulanceX, top - 48);
+  // Gugu walks toward it
+  drawGugu();
+  // Overlay text after Gugu reaches ambulance
+  if (gugu.x >= ambulanceX - 10) {
+    ctx.fillStyle = 'rgba(0,0,20,0.82)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Redraw vehicles centered on top
+    const vehY = 40;
+    drawFireTruck(canvas.width / 2 - 120, vehY);
+    drawAmbulance(canvas.width / 2 + 10, vehY - 2);
+
+    const cy = canvas.height / 2 + 30;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+
+    ctx.font = 'bold 34px sans-serif';
+    ctx.fillText('YEAAAH!! 🎉', canvas.width / 2, cy - 75);
+
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillText('🚑 O Gugu está salvo! 🚒', canvas.width / 2, cy - 42);
+
+    ctx.fillStyle = '#4fc3f7';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('O GUGU, não se sabe como, safou-se!', canvas.width / 2, cy - 14);
+
+    ctx.fillStyle = '#ffd54f';
+    ctx.font = '17px sans-serif';
+    ctx.fillText(`🐟 ${sardinesCollected}  🍺 ${bottlesCollected}  |  Recorde: ${highScore}pts`, canvas.width / 2, cy + 14);
+
+    ctx.fillStyle = '#4f4';
+    ctx.font = 'bold 19px sans-serif';
+    ctx.fillText('🎉 Completaste os 3 Níveis! 🎉', canvas.width / 2, cy + 46);
+
+    ctx.fillStyle = '#aee';
+    ctx.font = '13px sans-serif';
+    ctx.fillText('Clica para jogar outra vez', canvas.width / 2, cy + 72);
+    ctx.textAlign = 'left';
+
+    // Confetti!
+    drawFireworks();
+
+    // Friends partying at the bottom
+    const partyY = canvas.height - 60;
+    drawPartyFriend(canvas.width / 2 - 80, partyY, 0);
+    drawPartyFriend(canvas.width / 2 - 15, partyY, 1);
+    drawPartyFriend(canvas.width / 2 + 50, partyY, 2);
+  }
+}
+
+function drawDrowning() {
+  const top = PIER_TOP();
+  const guguCx = gugu.x + gugu.w / 2;
+  const guguCy = gugu.y + gugu.h / 2;
+
+  // Water surface overlay (Gugu is underwater)
+  if (gugu.y > top) {
+    // Dark water overlay above Gugu
+    ctx.fillStyle = 'rgba(5,15,30,0.3)';
+    ctx.fillRect(0, top, canvas.width, canvas.height - top);
+  }
+
+  // Draw Gugu sinking (fading out)
+  if (gugu.y < canvas.height + 60) {
+    const depthFromSurface = gugu.y - top;
+    const sinkAlpha = Math.max(0, 1 - depthFromSurface / 100);
+    ctx.globalAlpha = sinkAlpha;
+    // Gugu tilts as he sinks
+    ctx.save();
+    ctx.translate(guguCx, guguCy);
+    ctx.rotate(Math.sin(drownTimer * 0.03) * 0.3 + drownTimer * 0.003);
+    ctx.translate(-guguCx, -guguCy);
+    drawGugu();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // Draw sharks
+  for (const s of drownSharks) {
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.scale(s.dir, 1);
+    // Shark body
+    ctx.fillStyle = '#4a5568';
+    ctx.beginPath();
+    ctx.moveTo(25, 0);
+    ctx.quadraticCurveTo(15, -10, -15, -3);
+    ctx.quadraticCurveTo(-25, 0, -15, 5);
+    ctx.quadraticCurveTo(10, 12, 25, 0);
+    ctx.fill();
+    // Dorsal fin
+    ctx.fillStyle = '#3a4556';
+    ctx.beginPath();
+    ctx.moveTo(5, -3);
+    ctx.lineTo(0, -18);
+    ctx.lineTo(-8, -3);
+    ctx.fill();
+    // Tail fin
+    ctx.beginPath();
+    ctx.moveTo(-15, -1);
+    ctx.lineTo(-28, -10);
+    ctx.lineTo(-20, 0);
+    ctx.lineTo(-28, 8);
+    ctx.lineTo(-15, 2);
+    ctx.fill();
+    // Eye
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(16, -2, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(17, -2, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Teeth (mouth open when close)
+    const dist = Math.sqrt((s.x - guguCx) ** 2 + (s.y - guguCy) ** 2);
+    if (dist < 80) {
+      ctx.fillStyle = '#fff';
+      // Upper teeth
+      for (let t = 0; t < 5; t++) {
+        ctx.beginPath();
+        ctx.moveTo(22 + t * 2, 2);
+        ctx.lineTo(23 + t * 2, 5);
+        ctx.lineTo(21 + t * 2, 2);
+        ctx.fill();
+      }
+      // Mouth
+      ctx.fillStyle = '#c0392b';
+      ctx.beginPath();
+      ctx.ellipse(24, 3, 5, 3, 0, 0, Math.PI);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Bubbles and blood
+  for (const b of drownBubbles) {
+    const alpha = b.life / 80;
+    if (b.blood) {
+      // Blood cloud
+      ctx.fillStyle = `rgba(180,30,30,${alpha * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = `rgba(150,220,255,${alpha * 0.6})`;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(200,240,255,${alpha * 0.3})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Dramatic text
+  if (drownTimer < 120) {
+    const glugAlpha = 0.6 + Math.sin(drownTimer * 0.12) * 0.3;
+    ctx.fillStyle = `rgba(150,220,255,${glugAlpha})`;
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('glug... glug... glug...', guguCx, Math.min(gugu.y - 10, top - 5));
+    ctx.textAlign = 'left';
+  } else if (drownTimer > 150 && drownTimer < 350) {
+    const helpAlpha = 0.5 + Math.sin(drownTimer * 0.08) * 0.4;
+    ctx.fillStyle = `rgba(255,60,60,${helpAlpha})`;
+    ctx.font = 'bold 26px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SOCORRO!!', guguCx, top - 15);
+    ctx.textAlign = 'left';
+  } else if (drownTimer > 550) {
+    const fadeAlpha = Math.min(1, (drownTimer - 550) / 60);
+    ctx.fillStyle = `rgba(255,255,255,${fadeAlpha * 0.7})`;
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('R.I.P. Gugu 🪦', canvas.width / 2, top - 20);
+    ctx.textAlign = 'left';
+  }
+
+  // Fin above water (shark dorsal fin visible from surface)
+  for (const s of drownSharks) {
+    if (s.y > top - 5 && s.y < top + 20) {
+      ctx.fillStyle = '#3a4556';
+      ctx.beginPath();
+      ctx.moveTo(s.x + s.dir * 5, top);
+      ctx.lineTo(s.x, top - 14);
+      ctx.lineTo(s.x - s.dir * 8, top);
+      ctx.fill();
+    }
+  }
+}
+
+function drawLeaderboard() {
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = '#ffd54f';
+  ctx.fillText('🏆 Top 10', canvas.width / 2, canvas.height / 2 + 145);
+  ctx.font = '11px monospace';
+  const startY = canvas.height / 2 + 162;
+  if (leaderboard.length === 0) {
+    ctx.fillStyle = '#666';
+    ctx.fillText('Sem jogadores ainda', canvas.width / 2, startY);
+  } else {
+    for (let i = 0; i < Math.min(10, leaderboard.length); i++) {
+      const e = leaderboard[i];
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+      ctx.fillStyle = i < 3 ? '#ffd54f' : '#aaa';
+      ctx.fillText(`${medal} ${e.name.padEnd(12)} ${String(e.score).padStart(5)}pts  Nv${e.level}`, canvas.width / 2, startY + i * 14);
+    }
+  }
+  ctx.textAlign = 'left';
+}
+
+function drawDiogoRunning(dx, dy) {
+  const f = FRIENDS[1]; // Diogo
+  const runFrame = Math.floor(frameCount / 5) % 4;
+  const legOff = [0, 4, 0, -4][runFrame];
+  ctx.save();
+  // Body
+  ctx.fillStyle = f.color;
+  ctx.fillRect(dx + 3, dy + 14, 14, 16);
+  // Legs (running)
+  ctx.fillStyle = '#264653';
+  ctx.fillRect(dx + 4, dy + 30, 5, 8 + legOff);
+  ctx.fillRect(dx + 11, dy + 30, 5, 8 - legOff);
+  // Shoes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(dx + 3, dy + 37 + Math.max(0, legOff), 7, 3);
+  ctx.fillRect(dx + 10, dy + 37 + Math.max(0, -legOff), 7, 3);
+  // Head
+  ctx.fillStyle = '#d4a373';
+  ctx.beginPath(); ctx.arc(dx + 10, dy + 8, 8, 0, Math.PI * 2); ctx.fill();
+  // Hair
+  ctx.fillStyle = f.hair;
+  ctx.beginPath(); ctx.arc(dx + 10, dy + 5, 8, Math.PI, Math.PI * 2); ctx.fill();
+  // Eyes (looking forward, panicked)
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(dx + 12, dy + 7, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(dx + 17, dy + 7, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(dx + 13, dy + 7, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(dx + 18, dy + 7, 1.2, 0, Math.PI * 2); ctx.fill();
+  // Open mouth screaming
+  ctx.fillStyle = '#c1121f';
+  ctx.beginPath(); ctx.ellipse(dx + 14, dy + 14, 3, 3, 0, 0, Math.PI * 2); ctx.fill();
+  // Arms pumping
+  const armAng = Math.sin(frameCount * 0.2) * 0.5;
+  ctx.fillStyle = '#d4a373';
+  ctx.save();
+  ctx.translate(dx + 17, dy + 16);
+  ctx.rotate(-0.5 + armAng);
+  ctx.fillRect(0, -2, 3, 12);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(dx + 3, dy + 16);
+  ctx.rotate(0.5 - armAng);
+  ctx.fillRect(-3, -2, 3, 12);
+  ctx.restore();
+  // Name
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = 'bold 8px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('DIOGO', dx + 10, dy - 3);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+function drawIntro() {
+  const top = PIER_TOP();
+  // Draw Diogo running
+  if (diogoX < canvas.width + 30) {
+    drawDiogoRunning(diogoX, top - 44);
+  }
+  // Speech bubbles
+  if (introTimer > 200 && introTimer < 450) {
+    // Diogo's speech bubble
+    const bText = 'EU SAFO-ME!!';
+    ctx.font = 'bold 14px sans-serif';
+    const tw = ctx.measureText(bText).width;
+    const bx = Math.min(diogoX - tw / 2 - 8, canvas.width - tw - 20);
+    const by = top - 80;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.roundRect(bx, by, tw + 16, 24, 6); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(Math.min(diogoX + 5, bx + tw + 10), by + 24);
+    ctx.lineTo(Math.min(diogoX + 12, bx + tw + 14), by + 24);
+    ctx.lineTo(Math.min(diogoX + 8, bx + tw + 12), by + 32);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.textAlign = 'center';
+    ctx.fillText(bText, bx + tw / 2 + 8, by + 17);
+    ctx.textAlign = 'left';
+  }
+  // Intro text overlay
+  if (introText) {
+    ctx.fillStyle = 'rgba(0,0,20,0.4)';
+    ctx.fillRect(0, canvas.height / 2 - 30, canvas.width, 60);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    const pulse = 1 + Math.sin(frameCount * 0.1) * 0.03;
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.scale(pulse, pulse);
+    ctx.fillText(introText, 0, 8);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+  // Dust behind Diogo
+  if (introTimer > 200 && introTimer < 900 && introTimer % 3 === 0) {
+    ctx.fillStyle = 'rgba(200,180,150,0.15)';
+    for (let d = 0; d < 3; d++) {
+      ctx.beginPath();
+      ctx.arc(diogoX - 5 - d * 8 - Math.random() * 10, top - 8 + Math.random() * 6, 4 + Math.random() * 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+// ── Background clouds ──
+const clouds = Array.from({ length: 6 }, () => ({
+  x: Math.random() * 1000,
+  y: 20 + Math.random() * 80,
+  w: 50 + Math.random() * 70,
+  speed: 0.15 + Math.random() * 0.25
+}));
+
+function drawClouds() {
+  // Thin clouds at night
+  ctx.fillStyle = 'rgba(150,160,200,0.06)';
+  for (const c of clouds) {
+    c.x -= c.speed;
+    if (c.x < -c.w) c.x = canvas.width + 20;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, c.w / 2, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(c.x - c.w * 0.2, c.y + 5, c.w * 0.3, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ── Distant buildings (Estoril skyline at night) ──
+function drawSkyline() {
+  ctx.fillStyle = 'rgba(10,10,25,0.6)';
+  const base = PIER_TOP() - 10;
+  const buildings = [
+    [50, 60], [90, 45], [130, 70], [180, 40], [220, 55],
+    [270, 80], [330, 50], [390, 65], [430, 35], [480, 75],
+    [550, 55], [610, 45], [650, 60], [720, 40], [780, 50]
+  ];
+  for (const [bx, bh] of buildings) {
+    ctx.fillRect(bx, base - bh, 30, bh);
+    // Lit windows
+    ctx.fillStyle = 'rgba(255,220,100,0.5)';
+    for (let wy = base - bh + 8; wy < base - 6; wy += 14) {
+      for (let wx = bx + 5; wx < bx + 26; wx += 10) {
+        if (Math.sin(bx * 3.7 + wy * 2.3) > 0) {
+          ctx.fillRect(wx, wy, 5, 6);
+        }
+      }
+    }
+    ctx.fillStyle = 'rgba(10,10,25,0.6)';
+  }
+  // Casino Estoril hint
+  ctx.fillStyle = 'rgba(15,15,35,0.5)';
+  ctx.fillRect(canvas.width * 0.5, base - 95, 60, 95);
+  ctx.fillRect(canvas.width * 0.5 + 10, base - 110, 40, 20);
+  // Casino lights
+  ctx.fillStyle = 'rgba(255,200,80,0.4)';
+  for (let wy = base - 90; wy < base - 10; wy += 16) {
+    for (let wx = canvas.width * 0.5 + 8; wx < canvas.width * 0.5 + 55; wx += 12) {
+      ctx.fillRect(wx, wy, 6, 8);
+    }
+  }
+  // Casino sign glow
+  ctx.fillStyle = `rgba(255,100,100,${0.3 + Math.sin(frameCount * 0.04) * 0.15})`;
+  ctx.font = 'bold 8px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('CASINO', canvas.width * 0.5 + 30, base - 96);
+  ctx.textAlign = 'left';
+}
+
+// ── Friends on the pier ──
+const FRIENDS = [
+  { name: 'Miguel', color: '#2196f3', hair: '#111', offset: 0 },
+  { name: 'Diogo', color: '#4caf50', hair: '#5d3a1a', offset: 1 },
+  { name: 'Pires', color: '#ff9800', hair: '#222', offset: 2 },
+];
+
+function drawFriends() {
+  const top = PIER_TOP();
+  const baseX = canvas.width - 80;
+  
+  for (let fi = 0; fi < FRIENDS.length; fi++) {
+    const f = FRIENDS[fi];
+    const fx = baseX + fi * 28;
+    const fy = top - 44;
+    const wobble = Math.sin(frameCount * 0.1 + f.offset * 2) * 0.05;
+    const armWave = Math.sin(frameCount * 0.12 + f.offset * 1.7) * 8;
+    
+    ctx.save();
+    ctx.translate(fx + 10, top - 6);
+    ctx.rotate(wobble);
+    ctx.translate(-(fx + 10), -(top - 6));
+    
+    // Body
+    ctx.fillStyle = f.color;
+    ctx.fillRect(fx + 3, fy + 14, 14, 16);
+    // Legs
+    ctx.fillStyle = '#264653';
+    ctx.fillRect(fx + 4, fy + 30, 5, 10);
+    ctx.fillRect(fx + 11, fy + 30, 5, 10);
+    // Head
+    ctx.fillStyle = '#d4a373';
+    ctx.beginPath(); ctx.arc(fx + 10, fy + 8, 8, 0, Math.PI * 2); ctx.fill();
+    // Hair
+    ctx.fillStyle = f.hair;
+    ctx.beginPath(); ctx.arc(fx + 10, fy + 5, 8, Math.PI, Math.PI * 2); ctx.fill();
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(fx + 7, fy + 8, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(fx + 13, fy + 8, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(fx + 7, fy + 8, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(fx + 13, fy + 8, 1, 0, Math.PI * 2); ctx.fill();
+    // Open mouth (shouting!)
+    ctx.fillStyle = '#c1121f';
+    ctx.beginPath(); ctx.ellipse(fx + 10, fy + 14, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    // Waving arm
+    ctx.save();
+    ctx.translate(fx + 17, fy + 16);
+    ctx.rotate(-0.8 + armWave * 0.05);
+    ctx.fillStyle = '#d4a373';
+    ctx.fillRect(0, -2, 3, 12);
+    ctx.restore();
+    if (fi === 0) {
+      // Miguel holds phone up high to film with flash
+      const phoneAng = -1.3 + Math.sin(frameCount * 0.04) * 0.06;
+      ctx.save();
+      ctx.translate(fx + 2, fy + 10);
+      ctx.rotate(phoneAng);
+      // Arm holding phone up
+      ctx.fillStyle = '#d4a373';
+      ctx.fillRect(-2, -2, 4, 16);
+      // Phone body
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-7, -22, 14, 22);
+      // Screen
+      ctx.fillStyle = '#4af';
+      ctx.fillRect(-5, -20, 10, 16);
+      // Camera lens on back
+      ctx.fillStyle = '#333';
+      ctx.beginPath(); ctx.arc(3, -20, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#556';
+      ctx.beginPath(); ctx.arc(3, -20, 1.5, 0, Math.PI * 2); ctx.fill();
+      // Flash light (bright!)
+      const flashOn = Math.floor(frameCount / 15) % 3 === 0;
+      if (flashOn) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(-3, -20, 2, 0, Math.PI * 2); ctx.fill();
+        // Flash glow cone
+        ctx.fillStyle = 'rgba(255,255,220,0.25)';
+        ctx.beginPath();
+        ctx.moveTo(-3, -22);
+        ctx.lineTo(-25, -50);
+        ctx.lineTo(18, -50);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,200,0.10)';
+        ctx.beginPath();
+        ctx.moveTo(-3, -22);
+        ctx.lineTo(-40, -70);
+        ctx.lineTo(30, -70);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.fillStyle = '#aaa';
+        ctx.beginPath(); ctx.arc(-3, -20, 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+      // REC dot blinking
+      const recBlink = Math.floor(frameCount / 20) % 2 === 0;
+      if (recBlink) {
+        ctx.fillStyle = '#f44';
+        ctx.beginPath(); ctx.arc(-4, -18, 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+      // REC text on screen
+      ctx.fillStyle = '#f44';
+      ctx.font = 'bold 4px sans-serif';
+      ctx.fillText('REC', -4, -7);
+      ctx.restore();
+    } else {
+      // Beer in other hand
+      ctx.fillStyle = '#daa520';
+      ctx.fillRect(fx - 2, fy + 22, 5, 8);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(fx - 2, fy + 20, 5, 3);
+    }
+    // Name
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = 'bold 7px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(f.name, fx + 10, fy - 2);
+    ctx.textAlign = 'left';
+    
+    ctx.restore();
+  }
+}
+
+function drawShouts() {
+  if (state !== STATE.PLAYING) return;
+  // Update shout
+  shoutTimer--;
+  if (shoutTimer <= 0) {
+    shoutText = SHOUTS[Math.floor(Math.random() * SHOUTS.length)];
+    shoutFriendIdx = Math.floor(Math.random() * FRIENDS.length);
+    shoutTimer = 80 + Math.random() * 60;
+  }
+  if (shoutTimer > 40) {
+    const fi = shoutFriendIdx;
+    const fx = (canvas.width - 80) + fi * 28 + 10;
+    const fy = PIER_TOP() - 70;
+    // Measure text first
+    ctx.font = 'bold 11px sans-serif';
+    const tw = ctx.measureText(shoutText).width;
+    const bubbleW = tw + 16;
+    const bubbleH = 22;
+    // Clamp bubble to canvas
+    let bx = fx - bubbleW / 2;
+    if (bx + bubbleW > canvas.width - 4) bx = canvas.width - bubbleW - 4;
+    if (bx < 4) bx = 4;
+    const by = fy - bubbleH / 2;
+    // Speech bubble background
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bubbleW, bubbleH, 6);
+    ctx.fill();
+    // Bubble tail
+    const tailX = Math.min(Math.max(fx, bx + 8), bx + bubbleW - 8);
+    ctx.beginPath();
+    ctx.moveTo(tailX - 4, by + bubbleH);
+    ctx.lineTo(tailX + 4, by + bubbleH);
+    ctx.lineTo(tailX, by + bubbleH + 8);
+    ctx.closePath();
+    ctx.fill();
+    // Text centered in bubble
+    ctx.fillStyle = '#222';
+    ctx.textAlign = 'center';
+    ctx.fillText(shoutText, bx + bubbleW / 2, by + 15);
+    ctx.textAlign = 'left';
+  }
+}
+
+// ── Main Loop ──
+function gameLoop() {
+  // Screen shake
+  ctx.save();
+  if (shakeTimer > 0) {
+    shakeTimer--;
+    ctx.translate(Math.random() * 6 - 3, Math.random() * 6 - 3);
+  }
+
+  update();
+
+  // Draw
+  drawSky();
+  drawClouds();
+  drawSkyline();
+  drawOcean();
+  drawPier();
+
+  if (state === STATE.PLAYING || state === STATE.GAMEOVER || state === STATE.LEVELUP || state === STATE.DROWNING) {
+    drawWave();
+    drawObstacles();
+    drawSardines();
+    drawBottles();
+    if (state !== STATE.DROWNING) drawGugu();
+    drawFriends();
+    drawShouts();
+    drawSplash();
+    drawHUD();
+  }
+
+  if (state === STATE.DROWNING) {
+    drawDrowning();
+  }
+
+  if (state === STATE.WIN) {
+    drawWave();
+    drawFriends();
+    drawSplash();
+    drawHUD();
+    drawWinScreen();
+  }
+
+  if (state === STATE.MENU) { drawGugu(); drawMenu(); }
+  if (state === STATE.GAMEOVER) drawGameOver();
+  if (state === STATE.LEVELUP) drawLevelUp();
+
+  if (state === STATE.INTRO) {
+    drawWave();
+    drawGugu();
+    drawIntro();
+  }
+
+  ctx.restore();
+  requestAnimationFrame(gameLoop);
+}
+
+// Init Gugu position for menu
+gugu.y = PIER_TOP() - gugu.h;
+gameLoop();
+</script>
+</body>
+</html>
