@@ -1021,7 +1021,7 @@ function update() {
   const lvlConf = LEVELS[level - 1];
   difficulty = 1 + frameCount / 3000;
   if (invincibleTimer > 0) invincibleTimer--;
-  score = Math.floor(frameCount / 7);
+  score = Math.floor(frameCount / 3);
 
   // Check level goal
   if (score >= LEVELS[level - 1].goal) {
@@ -1040,7 +1040,7 @@ function update() {
   }
 
   // Gugu physics
-  gugu.vy += 0.28;
+  gugu.vy += 0.55;
   gugu.y += gugu.vy;
   // Clamp to screen top
   if (gugu.y < 0) { gugu.y = 0; if (gugu.vy < 0) gugu.vy = 0; }
@@ -1055,8 +1055,8 @@ function update() {
   if (gugu.animTimer > 6) { gugu.animTimer = 0; gugu.frame = (gugu.frame + 1) % 4; }
 
   // Wave
-  wave.speed = lvlConf.waveSpeed + (difficulty - 1) * 0.36;
-  wave.x += wave.speed * 1.35;
+  wave.speed = lvlConf.waveSpeed + (difficulty - 1) * 0.5;
+  wave.x += wave.speed * 2.0;
   // Level 1: wave can't reach Gugu, it stays behind
   if (level === 1 && wave.x > gugu.x - 60) {
     wave.x = gugu.x - 60;
@@ -1121,7 +1121,7 @@ function update() {
     obstacleTimer = Math.max(20, 47 - difficulty * 10) + Math.random() * 27;
   }
   for (let i = obstacles.length - 1; i >= 0; i--) {
-    obstacles[i].x -= lvlConf.obstSpeed * difficulty * 4.5;
+    obstacles[i].x -= lvlConf.obstSpeed * difficulty * 6;
     if (obstacles[i].x < -50) { obstacles.splice(i, 1); continue; }
     // collision
     const o = obstacles[i];
@@ -1161,7 +1161,7 @@ function update() {
     sardineTimer = 100 + Math.random() * 120;
   }
   for (let i = sardines.length - 1; i >= 0; i--) {
-    sardines[i].x -= 3.6 * difficulty;
+    sardines[i].x -= 5 * difficulty;
     if (sardines[i].x < -30) { sardines.splice(i, 1); continue; }
     const s = sardines[i];
     if (!s.collected && gugu.x + gugu.w > s.x && gugu.x < s.x + s.w &&
@@ -1183,7 +1183,7 @@ function update() {
     bottleTimer = 140 + Math.random() * 160;
   }
   for (let i = bottles.length - 1; i >= 0; i--) {
-    bottles[i].x -= 3.6 * difficulty;
+    bottles[i].x -= 5 * difficulty;
     if (bottles[i].x < -30) { bottles.splice(i, 1); continue; }
     const b = bottles[i];
     if (!b.collected && gugu.x + gugu.w > b.x && gugu.x < b.x + b.w &&
