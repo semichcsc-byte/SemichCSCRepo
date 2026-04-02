@@ -165,52 +165,36 @@ muteBtn.addEventListener('click', (e) => {
 function initAudio() {
   try {
     if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      audioCtx = new AC();
       masterGain = audioCtx.createGain();
       masterGain.gain.value = muted ? 0 : 0.4;
       masterGain.connect(audioCtx.destination);
     }
     if (audioCtx.state === 'suspended') {
       audioCtx.resume().catch(() => {});
-      // iOS requires playing a silent buffer to unlock audio
+    }
+    // Always try to play silent buffer (iOS unlock)
+    try {
       const silentBuf = audioCtx.createBuffer(1, 1, 22050);
       const src = audioCtx.createBufferSource();
       src.buffer = silentBuf;
       src.connect(audioCtx.destination);
       src.start(0);
-    }
+    } catch(x) {}
   } catch(e) {}
 }
 
-// iOS CRITICAL: create and unlock AudioContext on the VERY FIRST touch
-// This must happen before prompt() or anything else
-let audioUnlocked = false;
-function unlockAudio(e) {
-  if (audioUnlocked && audioCtx && audioCtx.state === 'running') return;
-  try {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      masterGain = audioCtx.createGain();
-      masterGain.gain.value = muted ? 0 : 0.4;
-      masterGain.connect(audioCtx.destination);
-    }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-    // Play silent buffer to unlock iOS audio
-    const buf = audioCtx.createBuffer(1, 1, 22050);
-    const src = audioCtx.createBufferSource();
-    src.buffer = buf;
-    src.connect(audioCtx.destination);
-    src.start(0);
-    audioUnlocked = true;
-  } catch(ex) {}
+// iOS/Edge: unlock audio on EVERY user interaction, capture phase
+function unlockAudio() {
+  initAudio();
 }
-// Attach to ALL touch/click events at document level (highest priority)
 document.addEventListener('touchstart', unlockAudio, true);
 document.addEventListener('touchend', unlockAudio, true);
 document.addEventListener('mousedown', unlockAudio, true);
 document.addEventListener('click', unlockAudio, true);
+document.addEventListener('pointerdown', unlockAudio, true);
 
 function playJumpSfx() {
   if (!audioCtx || muted) return;
@@ -1873,6 +1857,13 @@ function drawMenu() {
   ctx.fillStyle = '#ffca28';
   ctx.font = 'bold 20px sans-serif';
   ctx.fillText('▶ Clica para jogar!', canvas.width / 2, canvas.height / 2 + 40);
+  // Audio debug for mobile
+  if (isMobile) {
+    ctx.fillStyle = '#666';
+    ctx.font = '9px sans-serif';
+    const audioState = audioCtx ? audioCtx.state : 'no ctx';
+    ctx.fillText(`🔊 Tira o modo silêncio! Audio: ${audioState}`, canvas.width / 2, canvas.height / 2 + 55);
+  }
   if (highScore > 0) {
     ctx.fillStyle = '#aaa';
     ctx.font = '12px sans-serif';
