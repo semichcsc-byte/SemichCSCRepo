@@ -111,8 +111,8 @@ const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 // Responsive canvas (smaller on mobile for performance)
 function resize() {
   if (isMobile) {
-    canvas.width = Math.min(600, window.innerWidth - 10);
-    canvas.height = Math.min(340, window.innerHeight - 30);
+    canvas.width = Math.min(400, window.innerWidth - 5);
+    canvas.height = Math.min(250, window.innerHeight - 20);
   } else {
     canvas.width = Math.min(900, window.innerWidth - 40);
     canvas.height = Math.min(500, window.innerHeight - 60);
@@ -172,6 +172,12 @@ function initAudio() {
     }
     if (audioCtx.state === 'suspended') {
       audioCtx.resume().catch(() => {});
+      // iOS requires playing a silent buffer to unlock audio
+      const silentBuf = audioCtx.createBuffer(1, 1, 22050);
+      const src = audioCtx.createBufferSource();
+      src.buffer = silentBuf;
+      src.connect(audioCtx.destination);
+      src.start(0);
     }
   } catch(e) {}
 }
@@ -671,8 +677,8 @@ let winTimer = 0;
 const SHOUTS = [
   'CORRE GUGU!!', 'FOGE!!', 'CUIDADO!!', 'MAIS RÁPIDO!!',
   'AI AI AI!!', 'A ONDA!!', 'TÁS BÊBEDO!!', 'SALTA!!',
-  'AHAHAHA!!', 'VAI VAI VAI!!', 'Ó GUGU!!', 'ESTÁS FEITO!!',
-  'É AGORA!!', 'NÃO PARES!!'
+  'AHAHAHA!!', 'VAI VAI VAI!!', 'Ó GUGU!!', 'FDX!!',
+  'É AGORA!!', 'NÃO PARES CRL!!'
 ];
 let shoutText = '';
 let shoutTimer = 0;
@@ -2576,6 +2582,7 @@ const FRIENDS = [
 ];
 
 function drawFriends() {
+  if (isMobile) return;
   const top = PIER_TOP();
   const baseX = canvas.width - 80;
   
@@ -2695,6 +2702,7 @@ function drawFriends() {
 }
 
 function drawShouts() {
+  if (isMobile) return;
   if (state !== STATE.PLAYING) return;
   // Update shout
   shoutTimer--;
@@ -2739,20 +2747,10 @@ function drawShouts() {
 }
 
 // ── Main Loop ──
-let lastTime = 0;
-
 function gameLoop(timestamp) {
-  if (!timestamp) timestamp = performance.now();
-  if (!lastTime) lastTime = timestamp;
-  const rawDelta = timestamp - lastTime;
-  lastTime = timestamp;
-  // How many ticks to run (1 at 60fps, 2 at 30fps, etc.)
-  const ticks = Math.min(Math.round(rawDelta / 16.67), 4);
-
-  for (let t = 0; t < Math.max(1, ticks); t++) {
-    update();
-    if (shakeTimer > 0) shakeTimer--;
-  }
+  // Single update per frame on mobile (no catching up)
+  update();
+  if (shakeTimer > 0) shakeTimer--;
 
   // Draw once per frame
   ctx.save();
