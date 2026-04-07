@@ -1,11 +1,6 @@
-# 🎮 Gugu Game
+# � Gugu Foge da Onda
 
-Uma coleção de jogos em browser feitos com JavaScript puro — sem dependências, sem frameworks.
-
-## Jogos
-
-### 🌊 Gugu Foge da Onda
-**[▶ Jogar](https://semichcsc-byte.github.io/SemichCSCRepo/gugu-tamariz.html)**
+**[▶ Jogar](https://semichcsc-byte.github.io/Gugu-Game/gugu-tamariz.html)**
 
 Runner/platformer passado no Pontão do Tamariz (Estoril) numa noite de copos. O Gugu ficou para trás enquanto o Diogo fugiu — agora tens de correr, saltar e sobreviver à onda gigante!
 
@@ -20,24 +15,10 @@ Runner/platformer passado no Pontão do Tamariz (Estoril) numa noite de copos. O
 - 🏆 Leaderboard local Top 10
 - 📱 Funciona em mobile e desktop
 
-### 🧱 Tetris Modern Edition
-**[▶ Jogar](https://semichcsc-byte.github.io/SemichCSCRepo/)**
-
-Tetris moderno com visual neon/glass e mecânicas competitivas.
-
-- 🔄 SRS (Super Rotation System) com wall kicks
-- 🌀 T-Spins (full, mini) e Back-to-Back
-- 📦 Hold piece e Next queue (3 peças)
-- 💥 Combo system e scoring por nível
-- 👻 Ghost piece
-- 📱 Touch controls para mobile
-- 🏆 High score local
-
 ## Tecnologia
 
 - HTML5 Canvas 2D
 - JavaScript puro (vanilla)
-- CSS3 (responsive, glass design)
 - Web Audio API (sons gerados em código)
 - Zero dependências externas
 - LocalStorage para scores
@@ -45,7 +26,7 @@ Tetris moderno com visual neon/glass e mecânicas competitivas.
 ## Como Jogar
 
 Abre no browser — funciona direto, sem instalação:
-- Desktop: teclado (setas/WASD + espaço)
+- Desktop: teclado (espaço / setas para saltar, duplo salto no ar)
 - Mobile: toque/tap no ecrã
 
 ## Autor
