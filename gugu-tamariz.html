@@ -1796,8 +1796,11 @@ function drawMenu() {
   }
   if (!isMobile) {
     ctx.fillStyle = '#f4a828';
-    ctx.font = '10px sans-serif';
-    ctx.fillText('📱 Recomendado jogar no telemóvel (no PC pode ficar rápido demais)', canvas.width / 2, canvas.height / 2 + 72);
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText('📱 Recomendado jogar no telemóvel!', canvas.width / 2, canvas.height / 2 + 78);
+    ctx.font = '13px sans-serif';
+    ctx.fillStyle = '#d4a060';
+    ctx.fillText('(no PC pode ficar rápido demais)', canvas.width / 2, canvas.height / 2 + 98);
   }
   // Leaderboard
   drawLeaderboard();

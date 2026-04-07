@@ -2,6 +2,8 @@
 
 **[▶ Jogar](https://semichcsc-byte.github.io/Gugu-Game/gugu-tamariz.html)**
 
+> ⚠️ **Recomendado jogar no telemóvel!** No PC o jogo pode ficar rápido demais.
+
 Runner/platformer passado no Pontão do Tamariz (Estoril) numa noite de copos. O Gugu ficou para trás enquanto o Diogo fugiu — agora tens de correr, saltar e sobreviver à onda gigante!
 
 - 🏃 3 Níveis de dificuldade progressiva
